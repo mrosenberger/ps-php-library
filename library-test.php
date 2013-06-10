@@ -1,0 +1,34 @@
+<html>
+  <head>
+    <title>PS PHP Library Test</title>
+    <?php require 'ps-v3-library.php' ?>
+  </head>
+  <body>
+    <h3>
+      <center>
+        Simple test of PopShops V3 API PHP Library
+      </center>
+    </h3>
+    <hr>
+    <h4>
+      Logging information (off by default):
+    </h4>
+    <?php
+      $tmp_api_key = 'd1lg0my9c6y3j5iv5vkc6ayrd';
+      $tmp_catalog_id = 'dp4rtmme6tbhugpv6i59yiqmr';
+      $api = new PopShopsApi($tmp_api_key, $tmp_catalog_id);
+      $api->call('products', array('product' => '3393258'));
+    ?>
+    <hr>
+    <h4>
+      Demo of library capabilities (look at the PHP source to see what's going on):
+    </h4>
+    <?php
+      // The following code is intentionally over-complicated, just to show off the connections the library can make:
+      $offer = $api->get_merchants()[0]->resource('offers')[0];
+      print('The merchant "' . $offer->resource('merchant')->attr('name') . 
+	    '" has an offer with the name "' . $offer->attr('name') . 
+	    '" for the product called "' . $offer->resource('product')->attr('name') . '"');
+    ?>
+  </body>
+</html>
