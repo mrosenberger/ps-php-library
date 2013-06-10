@@ -421,7 +421,6 @@ abstract class PsApiResource {
 class PsApiProduct extends PsApiResource {
 
   private $offers;
-  private $category;
 
   public function __construct($reference) {
     parent::__construct($reference);
@@ -448,81 +447,13 @@ class PsApiProduct extends PsApiResource {
   }
 }  
 
-// PsApiProduct: An object-oriented representation of a Product, as returned from the PopShops V3 API
-class OldPsApiProduct {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Product instance
-  private $offers;     // A potentially cached array of references to offer objects; if not set, it'll be generated and cached when requested
-  private $category;   // A reference to the category object of this product, if it's been cached
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-    $this->offers = array(); // Special case; no other reference has to do this
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiProduct->attr: ' . $attribute;
-    }
-  }
+class PsApiMerchant extends PsApiResource {
   
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  public function add_offer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
-    array_push($this->offers, $offer);
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($resource) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
-    switch ($resource) {
-      case 'offers':
-	return $this->offers; // Special case... No caching because of how offers are nested inside products
-      case 'category':
-	return $this->reference->get_category($this->attr('category'));
-      case 'brand':
-	return $this->reference->get_brand($this->attr('brand'));
-    }
-  }
-}
-
-// PsApiMerchant: An object-oriented representation of a Merchant, as returned from the PopShops V3 API
-class PsApiMerchant {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Merchant instance
   private $offers;     // An array of offers from this merchant, if it's been cached already.
   private $deals;      // An array of deals from this merchant, if it's been cached already
 
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiMerchant->attr: ' . $attribute;
-    }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
+    parent::__construct($reference);
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
@@ -559,65 +490,22 @@ class PsApiMerchant {
   }
 }
 
-// PsApiDeal: An object-oriented representation of a Deal, as returned from the PopShops V3 API
-class PsApiDeal {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Deal instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
+class PsApiDeal extends PsApiResource {
+ 
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
+    parent::__construct($reference);
   }
 
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiDeal->attr: ' . $attribute;
-    }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
   public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
   }
 }
 
-// PsApiOffer: An object-oriented representation of a Offer, as returned from the PopShops V3 API
-class PsApiOffer {
+class PsApiOffer extends PsApiResource {
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Offer instance
-  private $product;    // A reference to the Product object that the offer belongs to
+  private $product;
 
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiOffer->attr: ' . $attribute;
-    }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
+    parent::__construct($reference);
   }
 
   public function set_product($product) {
@@ -635,110 +523,37 @@ class PsApiOffer {
       case 'merchant':
         return $this->reference->get_merchant($this->attr('merchant'));
     }
-  }
+  } 
 }
 
 
-// PsApiBrand: An object-oriented representation of a Brand, as returned from the PopShops V3 API
-class PsApiBrand {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Brand instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
+class PsApiBrand extends PsApiResource {
+  
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiBrand->attr: ' . $attribute;
-    }
+    parent::__construct($reference);
   }
   
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
+  public function resource($resource) {
   }
 }
 
-// PsApiCategory: An object-oriented representation of a Category, as returned from the PopShops V3 API
-class PsApiCategory {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Category instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
+class PsApiCategory extends PsApiResource {
+  
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiCategory->attr: ' . $attribute;
-    }
+    parent::__construct($reference);
   }
   
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
+  public function resource($resource) {
   }
 }
 
-
-// PsApiDealType: An object-oriented representation of a Deal Type, as returned from the PopShops V3 API
-class PsApiDealType {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this DealType instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
+class PsApiDealType extends PsApiResource {
+   
   public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiDealType->attr: ' . $attribute;
-    }
+    parent::__construct($reference);
   }
   
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
+  public function resource($resource) {
   }
 }
 
