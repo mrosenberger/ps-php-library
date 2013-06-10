@@ -390,66 +390,8 @@ class PopShopsApi {
   }
 }
 
-abstract class PsApiResource {
-  
-  protected $attr;
-  protected $reference;
-  
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to ' . get_class($this) . '->attr: ' . $attribute;
-    }
-  }
-
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Must be implemented by extended classes. Retrieves the specified resource (or array of resources) and returns it
-  abstract public function resource($resource);
-}
-  
-class PsApiProduct extends PsApiResource {
-
-  private $offers;
-  private $category;
-
-  public function __construct($reference) {
-    parent::__construct($reference);
-    $this->offers = array();
-  }
-
-  public function add_offer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
-    array_push($this->offers, $offer);
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($resource) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
-    switch ($resource) {
-      case 'offers':
-	return $this->offers; // Special case... No caching because of how offers are nested inside products
-      case 'category':
-	return $this->reference->get_category($this->attr('category'));
-      case 'brand':
-	return $this->reference->get_brand($this->attr('brand'));
-    }
-  }
-}  
-
 // PsApiProduct: An object-oriented representation of a Product, as returned from the PopShops V3 API
-class OldPsApiProduct {
+class PsApiProduct {
 
   private $attr;       // Mapping of attribute=>value pairs from the API
   private $reference;  // A reference to the PopShopsApi object which instantiated this Product instance
