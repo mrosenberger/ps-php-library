@@ -135,15 +135,15 @@ class PsApiCall {
     switch ($call_type) { // Based on the type of call, process the returned JSON accordingly
       case 'products':
 	$this->logger->info('Processing JSON from products call...');
-	$this->process_products_call($parsed_json);
+	$this->processProductsCall($parsed_json);
 	break;
       case 'merchants':
 	$this->logger->info('Processing JSON from merchants call...');
-	$this->process_merchants_call($parsed_json);
+	$this->processMerchantsCall($parsed_json);
 	break;
       case 'deals':
 	$this->logger->info('Processing JSON from deals call...');
-	$this->process_deals_call($parsed_json);
+	$this->processDealsCall($parsed_json);
 	break;
     }
     $this->logger->info('JSON processing completed.');
@@ -177,7 +177,7 @@ class PsApiCall {
   }
 
   // Retrieves an individual resource by its id. Accepts plural or singular $resource; behavior is identical
-  public function resource_by_id($resource, $id) {
+  public function resourceById($resource, $id) {
     switch($resource) {
     case 'products':
     case 'product':
@@ -207,34 +207,34 @@ class PsApiCall {
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Products API
-  private function process_products_call($parsed_json) {
+  private function processProductsCall($parsed_json) {
 
     // Load products
     $products = $parsed_json['results']['products']['product'];
     foreach ($products as $product) {
       $this->logger->info('Internalizing product with ID=' . (string) $product['id']);
-      $this->internalize_product($product);
+      $this->internalizeProduct($product);
     }
 
     // Load deals
     $deals = $parsed_json['results']['deals']['deal'];
     foreach ($deals as $deal) {
       $this->logger->info('Internalizing deal with ID=' . (string) $deal['id']);
-      $this->internalize_deal($deal);
+      $this->internalizeDeal($deal);
     }
 
     // Load merchants
     $merchants = $parsed_json['resources']['merchants']['merchant'];
     foreach ($merchants as $merchant) {
       $this->logger->info('Internalizing merchant with ID=' . (string) $merchant['id']);
-      $this->internalize_merchant($merchant);
+      $this->internalizeMerchant($merchant);
     }
     
     // Load brands
     $brands = $parsed_json['resources']['brands']['brand'];
     foreach ($brands as $brand) {
       $this->logger->info('Internalizing brand with ID=' . (string) $brand['id']);
-      $this->internalize_brand($brand);
+      $this->internalizeBrand($brand);
     }
 
     // Load categories from both matches and context
@@ -242,14 +242,14 @@ class PsApiCall {
       $categories = $parsed_json['resources']['categories']['matches']['category']; // Load from matches, if it exists
       foreach ($categories as $category) {
 	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
-	$this->internalize_category($category);
+	$this->internalizeCategory($category);
       }
     }
     if (array_key_exists('context', $parsed_json['resources']['categories'])) { // There's two places that categories exists. The 'matches' subsection, and the 'context' subsection
       $categories = $parsed_json['resources']['categories']['context']['category']; // Load from context, if it exists
       foreach ($categories as $category) {
 	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
-	$this->internalize_category($category);
+	$this->internalizeCategory($category);
       }
     }
 
@@ -257,75 +257,75 @@ class PsApiCall {
     $deal_types = $parsed_json['resources']['deal_types']['deal_type'];
     foreach ($deal_types as $deal_type) {
       $this->logger->info('Internalizing deal type with ID=' . (string) $deal_type['id']);
-      $this->internalize_deal_type($deal_type);
+      $this->internalizeDealType($deal_type);
     }
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
-  private function process_merchants_call($parsed_json) {
+  private function processMerchantsCall($parsed_json) {
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Deals API
-  private function process_deals_call($parsed_json) {
+  private function processDealsCall($parsed_json) {
   }
 
   // Takes the $json, puts its attributes and values into $object, and inserts it into $insert_into, keyed by $object's $json derived id
-  private function generic_internalize($json, $object, & $insert_into) {
+  private function genericInternalize($json, $object, & $insert_into) {
     foreach ($json as $attribute=>$value) {
-      $object->set_attr($attribute, $value);
+      $object->setAttr($attribute, $value);
     }
     $insert_into[$object->attr('id')] = $object;
   }
 
   // Takes a chunk of decoded JSON representing a single Product (and any included offers)
   // Turns the JSON into a Product object, and appends it to the internal $products array, then turns any included Offer objects, and appends them to the internal $offers array
-  private function internalize_product($product_json) {
+  private function internalizeProduct($product_json) {
     $tmp = new PsApiProduct($this);
     foreach ($product_json as $attribute=>$value) {
       switch ($attribute) { // This switch is meant to allow processing of special-case attributes
         case 'offers':
 	  $offers_array = $value['offer'];
 	  foreach ($offers_array as $offer) {
-	    $this->internalize_offer($offer);
-	    $this->offers[$offer['id']]->set_product($tmp); // Set the internalized offer's parent product to the currently internalized product
-	    $tmp->add_offer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
+	    $this->internalizeOffer($offer);
+	    $this->offers[$offer['id']]->setProduct($tmp); // Set the internalized offer's parent product to the currently internalized product
+	    $tmp->addOffer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
 	  }
 	  break;
         default: // If there's no special case processing to do
 	  if (is_numeric($value) or is_string($value)) { // Don't include any arrays or attributes that aren't just strings or numbers
-	    $tmp->set_attr($attribute, $value);
+	    $tmp->setAttr($attribute, $value);
 	  }
       }
     }
     $this->products[$tmp->attr('id')] = $tmp;
   }
 
-  private function internalize_merchant($merchant_json) {
-    $this->generic_internalize($merchant_json, (new PsApiMerchant($this)), $this->merchants);
+  private function internalizeMerchant($merchant_json) {
+    $this->genericInternalize($merchant_json, (new PsApiMerchant($this)), $this->merchants);
   }
 
-  private function internalize_offer($offer_json) {
-    $this->generic_internalize($offer_json, (new PsApiOffer($this)), $this->offers);
+  private function internalizeOffer($offer_json) {
+    $this->genericInternalize($offer_json, (new PsApiOffer($this)), $this->offers);
   }
 
-  private function internalize_deal($deal_json) {
-    $this->generic_internalize($deal_json, (new PsApiDeal($this)), $this->deals);
+  private function internalizeDeal($deal_json) {
+    $this->genericInternalize($deal_json, (new PsApiDeal($this)), $this->deals);
   }
 
-  private function internalize_brand($brand_json) {
-    $this->generic_internalize($brand_json, (new PsApiBrand($this)), $this->brands);
+  private function internalizeBrand($brand_json) {
+    $this->genericInternalize($brand_json, (new PsApiBrand($this)), $this->brands);
   }
 
-  private function internalize_deal_type($deal_type_json) {
-    $this->generic_internalize($deal_type_json, (new PsApiDealType($this)), $this->deal_types);
+  private function internalizeDealType($deal_type_json) {
+    $this->genericInternalize($deal_type_json, (new PsApiDealType($this)), $this->deal_types);
   }
 
-  private function internalize_category($category_json) {
-    $this->generic_internalize($category_json, (new PsApiCategory($this)), $this->categories);
+  private function internalizeCategory($category_json) {
+    $this->genericInternalize($category_json, (new PsApiCategory($this)), $this->categories);
   }
 
-  private function internalize_country($country_json) {
-    $this->generic_internalize($country_json, (new PsApiCountry($this)), $this->countries);
+  private function internalizeCountry($country_json) {
+    $this->genericInternalize($country_json, (new PsApiCountry($this)), $this->countries);
   }
 }
 
@@ -349,7 +349,7 @@ abstract class PsApiResource {
   }
 
   // Sets the given attribute to the given value. Should not be used by end-users of the PsApiCall library
-  public function set_attr($attribute, $value) {
+  public function setAttr($attribute, $value) {
     $this->attr[$attribute] = $value;
   }
 
@@ -366,7 +366,7 @@ class PsApiProduct extends PsApiResource {
     $this->offers = array();
   }
 
-  public function add_offer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
+  public function addOffer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
     $this->offers[] = $offer;
   }
 
@@ -379,9 +379,9 @@ class PsApiProduct extends PsApiResource {
       case 'offers':
 	return $this->offers; // Special case... No caching because of how offers are nested inside products
       case 'category':
-	return $this->reference->resource_by_id('category', $this->attr('category'));
+	return $this->reference->resourceById('category', $this->attr('category'));
       case 'brand':
-	return $this->reference->resource_by_id('brand', $this->attr('brand'));
+	return $this->reference->resourceById('brand', $this->attr('brand'));
     }
   }
 }  
@@ -466,7 +466,7 @@ class PsApiOffer extends PsApiResource {
     parent::__construct($reference);
   }
 
-  public function set_product($product) {
+  public function setProduct($product) {
     $this->product = $product;
   }
 
@@ -479,7 +479,7 @@ class PsApiOffer extends PsApiResource {
       case 'product':
 	return $this->product;
       case 'merchant':
-        return $this->reference->resource_by_id('merchant', $this->attr('merchant'));
+        return $this->reference->resourceById('merchant', $this->attr('merchant'));
     }
   } 
 }
