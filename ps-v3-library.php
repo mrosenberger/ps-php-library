@@ -181,28 +181,60 @@ class PsApiCall {
     switch($resource) {
     case 'products':
     case 'product':
-      return $this->products[$id];
+      if (array_key_exists($id, $this->products)) {
+	return $this->products[$id];
+      } else {
+	return new PsApiDummy($this, 'Product with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'offers':
     case 'offer':
-      return $this->offers[$id];
+      if (array_key_exists($id, $this->offers)) {
+	return $this->offers[$id];
+      } else {
+	return new PsApiDummy($this, 'Offer with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'merchants':
     case 'merchant':
-      return $this->merchants[$id];
+      if (array_key_exists($id, $this->merchants)) {
+	return $this->merchants[$id];
+      } else {
+	return new PsApiDummy($this, 'Merchant with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'deals':
     case 'deal':
-      return $this->deals[$id];
+      if (array_key_exists($id, $this->deals)) {
+	return $this->deals[$id];
+      } else {
+	return new PsApiDummy($this, 'Deal with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'deal_types':
     case 'deal_type':
-      return $this->deal_types[$id];
+      if (array_key_exists($id, $this->deal_types)) {
+	return $this->deal_types[$id];
+      } else {
+	return new PsApiDummy($this, 'DealType with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'categories':
     case 'category':
-      return $this->categories[$id];
+      if (array_key_exists($id, $this->categories)) {
+	return $this->categories[$id];
+      } else {
+	return new PsApiDummy($this, 'Category with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'brands':
     case 'brand':
-      return $this->brands[$id];
+      if (array_key_exists($id, $this->brands)) {
+	return $this->brands[$id];
+      } else {
+	return new PsApiDummy($this, 'Brand with id=' . $id . ' is not present in PsApiCall results.');
+      }
     case 'countries':
     case 'country':
-      return $this->countries[$id];
+      if (array_key_exists($id, $this->countries)) {
+	return $this->countries[$id];
+      } else {
+	return new PsApiDummy($this, 'Country with id=' . $id . ' is not present in PsApiCall results.');
+      }
     }
   }
 
@@ -440,18 +472,11 @@ class PsApiDeal extends PsApiResource {
   public function resource($resource) {
     switch ($resource) {
     case 'merchant':
-      return $this->reference->resource_by_id('merchant', $this->attr('merchant'));
+      return $this->reference->resourceById('merchant', $this->attr('merchant'));
     case 'deal_types':
       if (isset($this->deal_types)) {
 	return $this->deal_types;
       } else {
-	/*
-	$temp_types = explode(',', $this->attr('deal_type'));
-	foreach ($this->reference->resource('deal_types') as $deal_type) {
-	  if (in_array((string) $deal_type->attr('id'), $temp_types)) {
-	    $this->deal_types[] = $deal_type;
-	  }
-	  }*/
 	$this->deal_types = array();
 	$type_ids = explode(',', $this->attr('deal_type'));
 	foreach ($type_ids as $type_id) {
@@ -498,6 +523,20 @@ class PsApiBrand extends PsApiResource {
   }
   
   public function resource($resource) {
+    switch($resource) {
+    case 'products':
+      if (isset($this->products)) {
+	return $this->products;
+      } else {
+	$this->products = array();
+	  foreach ($this->reference->resource('products') as $product) {
+	    if ($product->attr('brand') == $this->attr('id')) {
+	      $this->products[] = $product;
+	    }
+	  }
+	  return $this->products;
+      }
+    }
   }
 }
 
@@ -561,6 +600,33 @@ class PsApiCountry extends PsApiResource {
   }
   
   public function resource($resource) {
+    switch($resource) {
+    }
+  }
+}
+
+// Meant to be returned when an error occurs
+class PsApiDummy extends PsApiResource {
+  
+  private $message;
+
+  public function __construct($reference, $message=null) {
+    parent::__construct($reference);
+    if (isset($message)) {
+      $this->message = $message;
+    }
+  }
+
+  public function attr($attribute) {
+    if (isset($this->message)) {
+      return $this->message;
+    } else {
+      return 'This element does not exist.';
+    }
+  }
+
+  public function resource($resource) {
+    return new PsApiDummy($reference, 'This element does not exist.');
   }
 }
 
