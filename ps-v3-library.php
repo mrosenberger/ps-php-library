@@ -3,12 +3,12 @@
 // ================ Musings ================
 
 // Maybe provide a nice tree structure pre-built for categories? --Not viable, not enough categories returned with API call
-// Three different inherited PopShopsApi types? Or just a flag? --Nope, just a flag. Much easier
 // Easy way to explain attr vs resource in the documentation: attr gives you values, resource gives you objects
 // Instead of "resource", maybe there really should be individual methods for each, because often, you need to pass an argument
 // For example, offers for a given merchant AND product
 // Ask about categories: context vs. matches, any sort of tree structure (even just parents)
 // Set up a better log system... Flag for logging to page vs. logging to system error log? Something like that. Fine for now.
+// Need to maintain order of elements in internal arrays...
 
 // ================  Code   ================
 
@@ -50,8 +50,8 @@ class PsApiLogger {
 
 }
 
-// PopShopsApi: A one-shot API request against PopShops' Merchants, Products, or Deals API
-class PopShopsApi {
+// PsApiCall: A one-shot API request against PopShops' Merchants, Products, or Deals API
+class PsApiCall {
 
   private $merchants;    // Associative array mapping ids to merchants.
   private $products;     // Associative array mapping ids to products.
@@ -60,12 +60,13 @@ class PopShopsApi {
   private $categories;   // Associative array mapping ids to categories.
   private $brands;       // Associative array mapping ids to brands.
   private $deal_types;   // Associative array mapping ids to deal_types.
+  private $countries;    // Associative array mapping ids to countries.
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
-  private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PopShopsApi object.
+  private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
   private $logger;       // A Logger object used to log progress and errors
 
-  // Constructs a PopShopsApi object using the provided api key and catalog id.
+  // Constructs a PsApiCall object using the provided api key and catalog id.
   public function __construct($api_key, $catalog_id) {
     $this->options['account'] = $api_key;
     $this->options['catalog'] = $catalog_id;
@@ -83,11 +84,11 @@ class PopShopsApi {
   public function call($call_type, $arguments) {
     $this->logger->info('Setting up to call PopShops ' . $call_type . ' API...');
     if ($this->called) {
-      $this->logger->error('Client attempted to call PopShopsApi object more than once. Call aborted.');
+      $this->logger->error('Client attempted to call PsApiCall object more than once. Call aborted.');
       return;
     }
     if (! in_array($call_type, array('products', 'merchants', 'deals'))) {
-      	$this->logger->error('Invalid call_type "' . $call_type . '" was passed to PopShopsApi->call. Call aborted.');
+      	$this->logger->error('Invalid call_type "' . $call_type . '" was passed to PsApiCall->call. Call aborted.');
 	return;
     }
     $this->call_type = $call_type;
@@ -106,7 +107,7 @@ class PopShopsApi {
       $this->logger->info('API reported status 200 OK');
     } else {
       $this->logger->info('API reported unexpected status: ' . $parsed_json['status'] . '; Message: ' . $parsed_json['message']);
-      $this->logger->error('Invalid status. Aborting call. Ensure all arguments passed to PopShopsApi->call are valid.');
+      $this->logger->error('Invalid status. Aborting call. Ensure all arguments passed to PsApiCall->call are valid.');
       return;
     }
     switch ($call_type) { // Based on the type of call, process the returned JSON accordingly
@@ -126,88 +127,56 @@ class PopShopsApi {
     $this->logger->info('JSON processing completed.');
   }
 
-  public function get_products() { // Returns an array of all of the products. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->products as $id=>$product) {
-      array_push($ret, $product);
+  // Retrieves an array of the given type of resource. $resource should be plural
+  public function resource($resource) {
+    switch($resource) {
+    case 'products':
+      return array_values($this->products);
+    case 'offers':
+      return array_values($this->offers);
+    case 'merchants':
+      return array_values($this->merchants);
+    case 'deals':
+      return array_values($this->deals);
+    case 'deal_types':
+      return array_values($this->deal_types);
+    case 'categories':
+      return array_values($this->categories);
+    case 'brands':
+      return array_values($this->brands);
+    case 'countries':
+      return array_values($this->countries);
     }
-    return $ret;
   }
 
-  public function get_merchants() { // Returns an array of all of the merchants. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->merchants as $id=>$merchant) {
-      array_push($ret, $merchant);
+  // Retrieves an individual resource by its id. Accepts plural or singular $resource; behavior is identical
+  public function resource_by_id($resource, $id) {
+    switch($resource) {
+    case 'products':
+    case 'product':
+      return $this->products[$id];
+    case 'offers':
+    case 'offer':
+      return $this->offers[$id];
+    case 'merchants':
+    case 'merchant':
+      return $this->merchants[$id];
+    case 'deals':
+    case 'deal':
+      return $this->deals[$id];
+    case 'deal_types':
+    case 'deal_type':
+      return $this->deal_types[$id];
+    case 'categories':
+    case 'category':
+      return $this->categories[$id];
+    case 'brands':
+    case 'brand':
+      return $this->brands[$id];
+    case 'countries':
+    case 'country':
+      return $this->countries[$id];
     }
-    return $ret;
-  }
-
-  public function get_offers() { // Returns an array of all of the offers. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->offers as $id=>$offer) {
-      array_push($ret, $offer);
-    }
-    return $ret;
-  }
-
-  public function get_deals() { // Returns an array of all of the deals. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->deals as $id=>$deal) {
-      array_push($ret, $deal);
-    }
-    return $ret;
-  }
-
-  public function get_deal_types() { // Returns an array of all of the deal_types. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->deal_types as $id=>$deal_type) {
-      array_push($ret, $deal_type);
-    }
-    return $ret;
-  }
-
-  public function get_categories() { // Returns an array of all of the categories. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->categories as $id=>$category) {
-      array_push($ret, $category);
-    }
-    return $ret;
-  }
-
-  public function get_brands() { // Returns an array of all of the brands. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->brands as $id=>$brand) {
-      array_push($ret, $brand);
-    }
-    return $ret;
-  }
-
-  public function get_product($id) { // Returns the product with the given id, if it exists
-    return $this->products[$id];
-  }
-
-  public function get_offer($id) { // Returns the offer with the given id, if it exists
-    return $this->offers[$id];
-  }
-
-  public function get_deal($id) { // Returns the deal with the given id, if it exists
-    return $this->deals[$id];
-  }
-
-  public function get_merchant($id) { // Returns the merchant with the given id, if it exists
-    return $this->merchants[$id];
-  }
-
-  public function get_category($id) { // Returns the category with the given id, if it exists
-    return $this->categories[$id];
-  }
-
-  public function get_deal_type($id) { // Returns the deal_type with the given id, if it exists
-    return $this->deal_types[$id];
-  }
-
-  public function get_brand($id) { // Returns the brand with the given id, if it exists
-    return $this->brands[$id];
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Products API
@@ -409,7 +378,7 @@ abstract class PsApiResource {
     }
   }
 
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
+  // Sets the given attribute to the given value. Should not be used by end-users of the PsApiCall library
   public function set_attr($attribute, $value) {
     $this->attr[$attribute] = $value;
   }
@@ -440,9 +409,9 @@ class PsApiProduct extends PsApiResource {
       case 'offers':
 	return $this->offers; // Special case... No caching because of how offers are nested inside products
       case 'category':
-	return $this->reference->get_category($this->attr('category'));
+	return $this->reference->resource_by_id('category', $this->attr('category'));
       case 'brand':
-	return $this->reference->get_brand($this->attr('brand'));
+	return $this->reference->resource_by_id('brand', $this->attr('brand'));
     }
   }
 }  
@@ -467,7 +436,7 @@ class PsApiMerchant extends PsApiResource {
 	  return $this->offers;
 	} else {
 	  $this->offers = array();
-	  foreach ($this->reference->get_offers() as $offer) {
+	  foreach ($this->reference->resource('offers') as $offer) {
 	    if ($offer->attr('merchant') == $this->attr('id')) {
 	      array_push($this->offers, $offer);
 	    }
@@ -479,7 +448,7 @@ class PsApiMerchant extends PsApiResource {
 	  return $this->deals;
 	} else {
 	  $this->deals = array();
-	  foreach ($this->reference->get_deals() as $deal) {
+	  foreach ($this->reference->resource('deals') as $deal) {
 	    if ($deal->attr('merchant') == $this->attr('id')) {
 	      array_push($this->deals, $deal);
 	    }
@@ -521,7 +490,7 @@ class PsApiOffer extends PsApiResource {
       case 'product':
 	return $this->product;
       case 'merchant':
-        return $this->reference->get_merchant($this->attr('merchant'));
+        return $this->reference->resource_by_id('merchant', $this->attr('merchant'));
     }
   } 
 }
@@ -548,6 +517,16 @@ class PsApiCategory extends PsApiResource {
 }
 
 class PsApiDealType extends PsApiResource {
+   
+  public function __construct($reference) {
+    parent::__construct($reference);
+  }
+  
+  public function resource($resource) {
+  }
+}
+
+class PsApiCountry extends PsApiResource {
    
   public function __construct($reference) {
     parent::__construct($reference);
