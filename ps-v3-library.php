@@ -63,16 +63,6 @@ class PsApiCall {
   private $deal_types;   // Associative array mapping ids to deal_types.
   private $countries;    // Associative array mapping ids to countries.
 
-  // Same as above, but simply arrays with indexes. These preserve the order that the API returned the results
-  private $merchants_sorted;
-  private $products_sorted;
-  private $deals_sorted;
-  private $offers_sorted;
-  private $categories_sorted;
-  private $brands_sorted;
-  private $deal_types_sorted;
-  private $countries_sorted;
-
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
   private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
@@ -94,15 +84,6 @@ class PsApiCall {
     $this->brands = array();
     $this->deal_types = array();
     $this->countries = array();
-
-    $this->merchants_sorted = array();
-    $this->products_sorted = array();
-    $this->deals_sorted = array();
-    $this->offers_sorted = array();
-    $this->categories_sorted = array();
-    $this->brands_sorted = array();
-    $this->deal_types_sorted = array();
-    $this->countries_sorted = array();
   }
 
   // Calls the specified PopShops API, then parses the results into internal data structures. 
@@ -164,21 +145,21 @@ class PsApiCall {
   public function resource($resource, $sort_by='relevance', $descending=True) {
     switch($resource) {
     case 'products':
-      return $this->products_sorted;
+      return array_values($this->products);
     case 'offers':
-      return $this->offers_sorted;
+      return array_values($this->offers);
     case 'merchants':
-      return $this->merchants_sorted;
+      return array_values($this->merchants);
     case 'deals':
-      return $this->deals;
+      return array_values($this->deals);
     case 'deal_types':
-      return $this->deal_types_sorted;
+      return array_values($this->deal_types);
     case 'categories':
-      return $this->categories_sorted;
+      return array_values($this->categories);
     case 'brands':
-      return $this->brands_sorted;
+      return array_values($this->brands);
     case 'countries':
-      return $this->countries_sorted;
+      return array_values($this->countries);
     }
   }
 
@@ -276,12 +257,11 @@ class PsApiCall {
   }
 
   // Takes the $json, puts its attributes and values into $object, and inserts it into $insert_into, keyed by $object's $json derived id
-  private function generic_internalize($json, $object, & $insert_into, & $insert_into_sorted) {
+  private function generic_internalize($json, $object, & $insert_into) {
     foreach ($json as $attribute=>$value) {
       $object->set_attr($attribute, $value);
     }
     $insert_into[$object->attr('id')] = $object;
-    $insert_into_sorted[] = $object;
   }
 
   // Takes a chunk of decoded JSON representing a single Product (and any included offers)
@@ -295,7 +275,6 @@ class PsApiCall {
 	  foreach ($offers_array as $offer) {
 	    $this->internalize_offer($offer);
 	    $this->offers[$offer['id']]->set_product($tmp); // Set the internalized offer's parent product to the currently internalized product
-	    $this->offers_sorted[] = $tmp;
 	    $tmp->add_offer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
 	  }
 	  break;
@@ -305,36 +284,35 @@ class PsApiCall {
 	  }
       }
     }
-    $this->products_sorted[] =  $tmp;
     $this->products[$tmp->attr('id')] = $tmp;
   }
 
   private function internalize_merchant($merchant_json) {
-    $this->generic_internalize($merchant_json, (new PsApiMerchant($this)), $this->merchants, $this->merchants_sorted);
+    $this->generic_internalize($merchant_json, (new PsApiMerchant($this)), $this->merchants);
   }
 
   private function internalize_offer($offer_json) {
-    $this->generic_internalize($offer_json, (new PsApiOffer($this)), $this->offers, $this->offers_sorted);
+    $this->generic_internalize($offer_json, (new PsApiOffer($this)), $this->offers);
   }
 
   private function internalize_deal($deal_json) {
-    $this->generic_internalize($deal_json, (new PsApiDeal($this)), $this->deals, $this->deals_sorted);
+    $this->generic_internalize($deal_json, (new PsApiDeal($this)), $this->deals);
   }
 
   private function internalize_brand($brand_json) {
-    $this->generic_internalize($brand_json, (new PsApiBrand($this)), $this->brands, $this->brands_sorted);
+    $this->generic_internalize($brand_json, (new PsApiBrand($this)), $this->brands);
   }
 
   private function internalize_deal_type($deal_type_json) {
-    $this->generic_internalize($deal_type_json, (new PsApiDealType($this)), $this->deal_types, $this->deal_types_sorted);
+    $this->generic_internalize($deal_type_json, (new PsApiDealType($this)), $this->deal_types);
   }
 
   private function internalize_category($category_json) {
-    $this->generic_internalize($category_json, (new PsApiCategory($this)), $this->categories, $this->categories_sorted);
+    $this->generic_internalize($category_json, (new PsApiCategory($this)), $this->categories);
   }
 
   private function internalize_country($country_json) {
-    $this->generic_internalize($country_json, (new PsApiCountry($this)), $this->countries, $this->countries_sorted);
+    $this->generic_internalize($country_json, (new PsApiCountry($this)), $this->countries);
   }
 }
 

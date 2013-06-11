@@ -29,7 +29,7 @@
       print('The merchant "' . $offer->resource('merchant')->attr('name') . 
 	    '" has an offer with the name "' . $offer->attr('name') . 
 	    '" for the product called "' . $offer->resource('product')->attr('name') . '"');
-      foreach ($api->resource('deals') as $deal) print($deal->attr('id') . '<br>');
+      foreach ($api->resource('deals') as $deal) print('<br>' . $deal->attr('id'));
     ?>
   </body>
 </html>
