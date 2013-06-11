@@ -411,8 +411,8 @@ class PsApiMerchant extends PsApiResource {
 	      $this->offers[] = $offer;
 	    }
 	  }
+	  return $this->offers;
 	}
-	return $this->offers;
       case 'deals':
 	if (isset($this->deals)) {
 	  return $this->deals;
@@ -423,8 +423,8 @@ class PsApiMerchant extends PsApiResource {
 	      $this->deals[] = $deal;
 	    }
 	  }
+	  return $this->deals;
 	}
-	return $this->deals;
     }
   }
 }
@@ -445,15 +445,20 @@ class PsApiDeal extends PsApiResource {
       if (isset($this->deal_types)) {
 	return $this->deal_types;
       } else {
-	$this->deal_types = array();
+	/*
 	$temp_types = explode(',', $this->attr('deal_type'));
 	foreach ($this->reference->resource('deal_types') as $deal_type) {
 	  if (in_array((string) $deal_type->attr('id'), $temp_types)) {
 	    $this->deal_types[] = $deal_type;
 	  }
+	  }*/
+	$this->deal_types = array();
+	$type_ids = explode(',', $this->attr('deal_type'));
+	foreach ($type_ids as $type_id) {
+	  $this->deal_types[] = $this->reference->resourceById('deal_type', $type_id);
 	}
+	return $this->deal_types;
       }
-      return $this->deal_types;
     }
   }
 }
@@ -481,9 +486,8 @@ class PsApiOffer extends PsApiResource {
       case 'merchant':
         return $this->reference->resourceById('merchant', $this->attr('merchant'));
     }
-  } 
+  }
 }
-
 
 class PsApiBrand extends PsApiResource {
   
@@ -515,19 +519,38 @@ class PsApiCategory extends PsApiResource {
 	    $this->products[] = $product;
 	  }
 	}
+	return $this->products;
       }
-      return $this->products;
     }
   }
 }
 
 class PsApiDealType extends PsApiResource {
    
+  private $deals;
+
   public function __construct($reference) {
     parent::__construct($reference);
   }
   
   public function resource($resource) {
+    switch ($resource) {
+    case 'deals':
+      if (isset($this->deals)) {
+	return $this->deals;
+      } else {
+	$this->deals = array();
+	foreach ($this->reference->resource('deals') as $deal) {
+	  $type_ids = explode(',', $deal->attr('deal_type'));
+	  foreach ($type_ids as $type_id) {
+	    if (((string) $type_id) == ((string) $this->attr('id'))) {
+	      $this->deals[] = $deal;
+	    }
+	  }
+	}
+	return $this->deals;
+      }
+    }
   }
 }
 
