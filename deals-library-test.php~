@@ -19,16 +19,16 @@
       }
       $tmp_api_key = 'd1lg0my9c6y3j5iv5vkc6ayrd';
       $tmp_catalog_id = 'dp4rtmme6tbhugpv6i59yiqmr';
-      $api = new PsApiCall($tmp_api_key, $tmp_catalog_id, true);
-      $api->call('merchants', array());
+      $api = new PsApiCall($tmp_api_key, $tmp_catalog_id);
+      $api->call('deals', array());
     ?>
     <hr>
     <h4>
       Demo of library capabilities (look at the PHP source to see what is going on):
     </h4>
-    <?php      
-    foreach ($api->resource('merchants') as $merchant) {
-      printbr('The merchant "' . $merchant->attr('name') . '" has the Merchant Type: ' . $merchant->resource('merchant_type')->attr('name'));
+    <?php
+    foreach ($api->resource('deals') as $deal) {
+      printbr($deal->attr('name') . ' FROM ' . $deal->resource('merchant')->attr('name'));
     }
     ?>
   </body>

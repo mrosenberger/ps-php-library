@@ -79,11 +79,11 @@ class PsApiCall {
   private $response_received_time; // Time that the API response was received
 
   // Constructs a PsApiCall object using the provided api key and catalog id.
-  public function __construct($api_key, $catalog_id) {
+  public function __construct($api_key, $catalog_id, $logging=false) {
     $this->options['account'] = $api_key;
     $this->options['catalog'] = $catalog_id;
     $this->logger = new PsApiLogger;
-    $this->logger->enable();
+    if ($logging) $this->logger->enable();
     $this->called = false;
 
     $this->merchants = array();
@@ -199,7 +199,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->products)) {
 	return $this->products[$id];
       } else {
-	return new PsApiDummy($this, 'Product with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Product with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'offers':
     case 'offer':
@@ -208,7 +208,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->offers)) {
 	return $this->offers[$id];
       } else {
-	return new PsApiDummy($this, 'Offer with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Offer with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'merchants':
     case 'merchant':
@@ -217,7 +217,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->merchants)) {
 	return $this->merchants[$id];
       } else {
-	return new PsApiDummy($this, 'Merchant with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Merchant with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'deals':
     case 'deal':
@@ -226,7 +226,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->deals)) {
 	return $this->deals[$id];
       } else {
-	return new PsApiDummy($this, 'Deal with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Deal with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'deal_types':
     case 'deal_type':
@@ -235,7 +235,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->deal_types)) {
 	return $this->deal_types[$id];
       } else {
-	return new PsApiDummy($this, 'DealType with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'DealType with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'categories':
     case 'category':
@@ -244,7 +244,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->categories)) {
 	return $this->categories[$id];
       } else {
-	return new PsApiDummy($this, 'Category with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Category with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'brands':
     case 'brand':
@@ -253,7 +253,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->brands)) {
 	return $this->brands[$id];
       } else {
-	return new PsApiDummy($this, 'Brand with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Brand with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'countries':
     case 'country':
@@ -262,7 +262,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->countries)) {
 	return $this->countries[$id];
       } else {
-	return new PsApiDummy($this, 'Country with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'Country with id=' . $id . ' is not present in PsApiCall results');
       }
     case 'merchant_types':
     case 'merchant_type':
@@ -271,7 +271,7 @@ class PsApiCall {
       if (array_key_exists($id, $this->merchant_types)) {
 	return $this->merchant_types[$id];
       } else {
-	return new PsApiDummy($this, 'MerchantType with id=' . $id . ' is not present in PsApiCall results.');
+	return new PsApiDummy($this, 'MerchantType with id=' . $id . ' is not present in PsApiCall results');
       }
     }
   }
@@ -338,30 +338,31 @@ class PsApiCall {
     $this->processDealsJson($parsed_json['results']['deals']['deal']);
     $this->processMerchantsJson($parsed_json['resources']['merchants']['merchant']);
     $this->processBrandsJson($parsed_json['resources']['brands']['brand']);
-    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // Load from matches, if it exists
+    if (array_key_exists('matches', $parsed_json['resources']['categories'])) // Load from matches, if it exists
       $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
-    }
-    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
+    if (array_key_exists('context', $parsed_json['resources']['categories'])) // Load from context, if it exists
       $this->processCategoriesJson($parsed_json['resources']['categories']['context']['category']);
-    }
     $this->processDealTypesJson($parsed_json['resources']['deal_types']['deal_type']);
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
   private function processMerchantsCall($parsed_json) {
     $this->processMerchantsJson($parsed_json['results']['merchants']['merchant']);
-    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // Load from matches, if it exists
+    if (array_key_exists('matches', $parsed_json['resources']['categories'])) // Load from matches, if it exists
       $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
-    }
-    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
+    if (array_key_exists('context', $parsed_json['resources']['categories'])) // Load from context, if it exists
       $this->processCategoriesJson($parsed_json['resources']['categories']['context']['category']);
-    }
     $this->processCountriesJson($parsed_json['resources']['countries']['country']);
     $this->processMerchantTypesJson($parsed_json['resources']['merchant_types']['merchant_type']);
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Deals API
   private function processDealsCall($parsed_json) {
+    $this->processDealsJson($parsed_json['results']['deals']['deal']);
+    $this->processDealTypesJson($parsed_json['resources']['deal_types']['deal_type']);
+    $this->processMerchantTypesJson($parsed_json['resources']['merchant_types']['merchant_type']);
+    $this->processCountriesJson($parsed_json['resources']['countries']['country']);
+    $this->processMerchantsJson($parsed_json['resources']['merchants']['merchant']);
   }
 
   // Takes the $json, puts its attributes and values into $object, and inserts it into $insert_into, keyed by $object's $json derived id
@@ -732,9 +733,9 @@ class PsApiDummy extends PsApiResource {
 
   public function attr($attribute) {
     if (isset($this->message)) {
-      return $this->message;
+      return '[' . $this->message . ']';
     } else {
-      return 'This element does not exist.';
+      return '[This element does not exist]';
     }
   }
 
