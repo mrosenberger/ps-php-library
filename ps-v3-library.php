@@ -53,6 +53,7 @@ class PsApiLogger {
 // PsApiCall: A one-shot API request against PopShops' Merchants, Products, or Deals API
 class PsApiCall {
 
+  // Associative arrays mapping ids to objects
   private $merchants;    // Associative array mapping ids to merchants.
   private $products;     // Associative array mapping ids to products.
   private $deals;        // Associative array mapping ids to deals.
@@ -61,6 +62,17 @@ class PsApiCall {
   private $brands;       // Associative array mapping ids to brands.
   private $deal_types;   // Associative array mapping ids to deal_types.
   private $countries;    // Associative array mapping ids to countries.
+
+  // Same as above, but simply arrays with indexes. These preserve the order that the API returned the results
+  private $merchants_sorted;
+  private $products_sorted;
+  private $deals_sorted;
+  private $offers_sorted;
+  private $categories_sorted;
+  private $brands_sorted;
+  private $deal_types_sorted;
+  private $countries_sorted;
+
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
   private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
@@ -73,6 +85,24 @@ class PsApiCall {
     $this->logger = new PsApiLogger;
     $this->logger->enable();
     $this->called = false;
+
+    $this->merchants = array();
+    $this->products = array();
+    $this->deals = array();
+    $this->offers = array();
+    $this->categories = array();
+    $this->brands = array();
+    $this->deal_types = array();
+    $this->countries = array();
+
+    $this->merchants_sorted = array();
+    $this->products_sorted = array();
+    $this->deals_sorted = array();
+    $this->offers_sorted = array();
+    $this->categories_sorted = array();
+    $this->brands_sorted = array();
+    $this->deal_types_sorted = array();
+    $this->countries_sorted = array();
   }
 
   // Calls the specified PopShops API, then parses the results into internal data structures. 
@@ -95,7 +125,7 @@ class PsApiCall {
     $this->called = true;
     $this->options = array_merge($this->options, $arguments);
     $formatted_options = array();
-    foreach ($this->options as $key=>$value) array_push($formatted_options, $key . '=' . urlencode($value));
+    foreach ($this->options as $key=>$value) $formatted_options[] = $key . '=' . urlencode($value);
     $url = 'http://api.popshops.com/v3/' . $call_type . '.json?' . implode('&', $formatted_options);
     $this->logger->info('Request URL: ' . $url);
     $this->logger->info('Sending request...');
@@ -128,24 +158,27 @@ class PsApiCall {
   }
 
   // Retrieves an array of the given type of resource. $resource should be plural
-  public function resource($resource) {
+  // $sort_by can be one of 'relevance', 'price'
+  // $descending, if True, will make returned element 0 have the highest value of $sort_by, while the last element will have the lowest
+  // If $descending is False, the opposite will occur
+  public function resource($resource, $sort_by='relevance', $descending=True) {
     switch($resource) {
     case 'products':
-      return array_values($this->products);
+      return $this->products_sorted;
     case 'offers':
-      return array_values($this->offers);
+      return $this->offers_sorted;
     case 'merchants':
-      return array_values($this->merchants);
+      return $this->merchants_sorted;
     case 'deals':
-      return array_values($this->deals);
+      return $this->deals;
     case 'deal_types':
-      return array_values($this->deal_types);
+      return $this->deal_types_sorted;
     case 'categories':
-      return array_values($this->categories);
+      return $this->categories_sorted;
     case 'brands':
-      return array_values($this->brands);
+      return $this->brands_sorted;
     case 'countries':
-      return array_values($this->countries);
+      return $this->countries_sorted;
     }
   }
 
@@ -242,9 +275,17 @@ class PsApiCall {
   private function process_deals_call($parsed_json) {
   }
 
+  // Takes the $json, puts its attributes and values into $object, and inserts it into $insert_into, keyed by $object's $json derived id
+  private function generic_internalize($json, $object, & $insert_into, & $insert_into_sorted) {
+    foreach ($json as $attribute=>$value) {
+      $object->set_attr($attribute, $value);
+    }
+    $insert_into[$object->attr('id')] = $object;
+    $insert_into_sorted[] = $object;
+  }
+
   // Takes a chunk of decoded JSON representing a single Product (and any included offers)
   // Turns the JSON into a Product object, and appends it to the internal $products array, then turns any included Offer objects, and appends them to the internal $offers array
-  // Returns true if success, false if parse/data error occurs
   private function internalize_product($product_json) {
     $tmp = new PsApiProduct($this);
     foreach ($product_json as $attribute=>$value) {
@@ -254,6 +295,7 @@ class PsApiCall {
 	  foreach ($offers_array as $offer) {
 	    $this->internalize_offer($offer);
 	    $this->offers[$offer['id']]->set_product($tmp); // Set the internalized offer's parent product to the currently internalized product
+	    $this->offers_sorted[] = $tmp;
 	    $tmp->add_offer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
 	  }
 	  break;
@@ -263,99 +305,36 @@ class PsApiCall {
 	  }
       }
     }
+    $this->products_sorted[] =  $tmp;
     $this->products[$tmp->attr('id')] = $tmp;
-    
-    return true;
   }
 
-  // Takes a chunk of decoded JSON representing a single Merchant
-  // Turns the JSON into a Merchant object, and appends it to the internal $merchants array
-  // Returns true if success, false if parse/data error occurs
   private function internalize_merchant($merchant_json) {
-    $tmp = new PsApiMerchant($this);
-    foreach ($merchant_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->merchants[$tmp->attr('id')] = $tmp;
-    return true;
+    $this->generic_internalize($merchant_json, (new PsApiMerchant($this)), $this->merchants, $this->merchants_sorted);
   }
 
-  // Takes a chunk of decoded JSON representing a single Deal
-  // Turns the JSON into a Deal object, and appends it to the internal $deals array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_deal($deal_json) {
-    $tmp = new PsApiDeal($this);
-    foreach ($deal_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->deals[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Offer
-  // Turns the JSON into a Offer object, and appends it to the internal $offers array
-  // Returns true if success, false if parse/data error occurs
   private function internalize_offer($offer_json) {
-    $tmp = new PsApiOffer($this);
-    foreach ($offer_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->offers[$tmp->attr('id')] = $tmp;
-    return true;
+    $this->generic_internalize($offer_json, (new PsApiOffer($this)), $this->offers, $this->offers_sorted);
   }
 
-  // Takes a chunk of decoded JSON representing a single Brand
-  // Turns the JSON into a Brand object, and appends it to the internal $brands array
-  // Returns true if success, false if parse/data error occurs
+  private function internalize_deal($deal_json) {
+    $this->generic_internalize($deal_json, (new PsApiDeal($this)), $this->deals, $this->deals_sorted);
+  }
+
   private function internalize_brand($brand_json) {
-    $tmp = new PsApiBrand($this);
-    foreach ($brand_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->brands[$tmp->attr('id')] = $tmp;
-    return true;
+    $this->generic_internalize($brand_json, (new PsApiBrand($this)), $this->brands, $this->brands_sorted);
   }
 
-  // Takes a chunk of decoded JSON representing a single Category
-  // Turns the JSON into a Category object, and appends it to the internal $categories array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_category($category_json) {
-    $tmp = new PsApiCategory($this);
-    foreach ($category_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->categories[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Deal Type
-  // Turns the JSON into a DealType object, and appends it to the internal $deal_types array
-  // Returns true if success, false if parse/data error occurs
   private function internalize_deal_type($deal_type_json) {
-    $tmp = new PsApiDealType($this);
-    foreach ($deal_type_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->deal_types[$tmp->attr('id')] = $tmp;
-    return true;
+    $this->generic_internalize($deal_type_json, (new PsApiDealType($this)), $this->deal_types, $this->deal_types_sorted);
+  }
+
+  private function internalize_category($category_json) {
+    $this->generic_internalize($category_json, (new PsApiCategory($this)), $this->categories, $this->categories_sorted);
+  }
+
+  private function internalize_country($country_json) {
+    $this->generic_internalize($country_json, (new PsApiCountry($this)), $this->countries, $this->countries_sorted);
   }
 }
 
@@ -386,7 +365,7 @@ abstract class PsApiResource {
   // Must be implemented by extended classes. Retrieves the specified resource (or array of resources) and returns it
   abstract public function resource($resource);
 }
-  
+
 class PsApiProduct extends PsApiResource {
 
   private $offers;
@@ -397,7 +376,7 @@ class PsApiProduct extends PsApiResource {
   }
 
   public function add_offer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
-    array_push($this->offers, $offer);
+    $this->offers[] = $offer;
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
@@ -438,7 +417,7 @@ class PsApiMerchant extends PsApiResource {
 	  $this->offers = array();
 	  foreach ($this->reference->resource('offers') as $offer) {
 	    if ($offer->attr('merchant') == $this->attr('id')) {
-	      array_push($this->offers, $offer);
+	      $this->offers[] = $offer;
 	    }
 	  }
 	}
@@ -450,7 +429,7 @@ class PsApiMerchant extends PsApiResource {
 	  $this->deals = array();
 	  foreach ($this->reference->resource('deals') as $deal) {
 	    if ($deal->attr('merchant') == $this->attr('id')) {
-	      array_push($this->deals, $deal);
+	      $this->deals[] = $deal;
 	    }
 	  }
 	}
