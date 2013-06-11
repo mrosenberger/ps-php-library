@@ -318,6 +318,20 @@ class PsApiCall {
     }
   }
 
+  private function processMerchantTypesJson($merchant_types_json) {
+    foreach ($merchant_types_json as $merchant_type) {
+      $this->logger->info('Internalizing merchant type with ID=' . (string) $merchant_type['id']);
+      $this->internalizeMerchantType($merchant_type);
+    }
+  }
+
+  private function processCountriesJson($countries_json) {
+    foreach ($countries_json as $country) {
+      $this->logger->info('Internalizing country with ID=' . (string) $country['id']);
+      $this->internalizeCountry($country);
+    }
+  }
+
   // Processes and internalizes the information present in a returned chunk of JSON from the Products API
   private function processProductsCall($parsed_json) {
     $this->processProductsJson($parsed_json['results']['products']['product']);
@@ -328,20 +342,22 @@ class PsApiCall {
       $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
     }
     if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
-      $this->processCategoriesjson($parsed_json['resources']['categories']['context']['category']);
+      $this->processCategoriesJson($parsed_json['resources']['categories']['context']['category']);
     }
     $this->processDealTypesJson($parsed_json['resources']['deal_types']['deal_type']);
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
   private function processMerchantsCall($parsed_json) {
-    $this->processMerchantJson($parsed_json['results']['merchants']['merchant']);
+    $this->processMerchantsJson($parsed_json['results']['merchants']['merchant']);
     if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // Load from matches, if it exists
       $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
     }
     if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
-      $this->processCategoriesjson($parsed_json['resources']['categories']['context']['category']);
+      $this->processCategoriesJson($parsed_json['resources']['categories']['context']['category']);
     }
+    $this->processCountriesJson($parsed_json['resources']['countries']['country']);
+    $this->processMerchantTypesJson($parsed_json['resources']['merchant_types']['merchant_type']);
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Deals API
