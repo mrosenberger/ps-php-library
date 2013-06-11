@@ -58,14 +58,15 @@ class PsApiLogger {
 class PsApiCall {
 
   // Associative arrays mapping ids to objects
-  private $merchants;    // Associative array mapping ids to merchants.
-  private $products;     // Associative array mapping ids to products.
-  private $deals;        // Associative array mapping ids to deals.
-  private $offers;       // Associative array mapping ids to offers.
-  private $categories;   // Associative array mapping ids to categories.
-  private $brands;       // Associative array mapping ids to brands.
-  private $deal_types;   // Associative array mapping ids to deal_types.
-  private $countries;    // Associative array mapping ids to countries.
+  private $merchants;      // Associative array mapping ids to merchants.
+  private $products;       // Associative array mapping ids to products.
+  private $deals;          // Associative array mapping ids to deals.
+  private $offers;         // Associative array mapping ids to offers.
+  private $categories;     // Associative array mapping ids to categories.
+  private $brands;         // Associative array mapping ids to brands.
+  private $deal_types;     // Associative array mapping ids to deal_types.
+  private $countries;      // Associative array mapping ids to countries.
+  private $merchant_types; // Associative array mapping ids to merchant_types.
 
   // Various internal fields
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
@@ -74,7 +75,7 @@ class PsApiCall {
   private $logger;       // A Logger object used to log progress and errors
 
   // For statistics and analysis
-  private $start_time;    // Time that PsApiCall->call was called
+  private $start_time;             // Time that PsApiCall->call was called
   private $response_received_time; // Time that the API response was received
 
   // Constructs a PsApiCall object using the provided api key and catalog id.
@@ -93,6 +94,7 @@ class PsApiCall {
     $this->brands = array();
     $this->deal_types = array();
     $this->countries = array();
+    $this->merchant_types = array();
   }
 
   // Calls the specified PopShops API, then parses the results into internal data structures. 
@@ -158,29 +160,42 @@ class PsApiCall {
   public function resource($resource, $sort_by='relevance', $descending=true) {
     switch($resource) {
     case 'products':
+    case 'Products':
       return array_values($this->products);
     case 'offers':
+    case 'Offers':
       return array_values($this->offers);
     case 'merchants':
+    case 'Merchants':
       return array_values($this->merchants);
     case 'deals':
+    case 'Deals':
       return array_values($this->deals);
     case 'deal_types':
+    case 'DealTypes':
       return array_values($this->deal_types);
     case 'categories':
+    case 'Categories':
       return array_values($this->categories);
     case 'brands':
+    case 'Brands':
       return array_values($this->brands);
     case 'countries':
+    case 'Countries':
       return array_values($this->countries);
+    case 'merchant_types':
+    case 'MerchantTypes':
+      return array_values($this->merchant_types);
     }
   }
 
   // Retrieves an individual resource by its id. Accepts plural or singular $resource; behavior is identical
   public function resourceById($resource, $id) {
     switch($resource) {
-    case 'products':
+    case 'products':      
     case 'product':
+    case 'Products':
+    case 'Product':
       if (array_key_exists($id, $this->products)) {
 	return $this->products[$id];
       } else {
@@ -188,6 +203,8 @@ class PsApiCall {
       }
     case 'offers':
     case 'offer':
+    case 'Offers':
+    case 'Offer':
       if (array_key_exists($id, $this->offers)) {
 	return $this->offers[$id];
       } else {
@@ -195,6 +212,8 @@ class PsApiCall {
       }
     case 'merchants':
     case 'merchant':
+    case 'Merchants':
+    case 'Merchant':
       if (array_key_exists($id, $this->merchants)) {
 	return $this->merchants[$id];
       } else {
@@ -202,6 +221,8 @@ class PsApiCall {
       }
     case 'deals':
     case 'deal':
+    case 'Deals':
+    case 'Deal':
       if (array_key_exists($id, $this->deals)) {
 	return $this->deals[$id];
       } else {
@@ -209,6 +230,8 @@ class PsApiCall {
       }
     case 'deal_types':
     case 'deal_type':
+    case 'DealTypes':
+    case 'DealType':
       if (array_key_exists($id, $this->deal_types)) {
 	return $this->deal_types[$id];
       } else {
@@ -216,6 +239,8 @@ class PsApiCall {
       }
     case 'categories':
     case 'category':
+    case 'Categories':
+    case 'Category':
       if (array_key_exists($id, $this->categories)) {
 	return $this->categories[$id];
       } else {
@@ -223,6 +248,8 @@ class PsApiCall {
       }
     case 'brands':
     case 'brand':
+    case 'Brands':
+    case 'Brand':
       if (array_key_exists($id, $this->brands)) {
 	return $this->brands[$id];
       } else {
@@ -230,10 +257,21 @@ class PsApiCall {
       }
     case 'countries':
     case 'country':
+    case 'Countries':
+    case 'Country':
       if (array_key_exists($id, $this->countries)) {
 	return $this->countries[$id];
       } else {
 	return new PsApiDummy($this, 'Country with id=' . $id . ' is not present in PsApiCall results.');
+      }
+    case 'merchant_types':
+    case 'merchant_type':
+    case 'MerchantTypes':
+    case 'MerchantType':
+      if (array_key_exists($id, $this->merchant_types)) {
+	return $this->merchant_types[$id];
+      } else {
+	return new PsApiDummy($this, 'MerchantType with id=' . $id . ' is not present in PsApiCall results.');
       }
     }
   }
@@ -297,6 +335,13 @@ class PsApiCall {
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
   private function processMerchantsCall($parsed_json) {
+    $this->processMerchantJson($parsed_json['results']['merchants']['merchant']);
+    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // Load from matches, if it exists
+      $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
+    }
+    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
+      $this->processCategoriesjson($parsed_json['resources']['categories']['context']['category']);
+    }
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Deals API
@@ -360,6 +405,10 @@ class PsApiCall {
 
   private function internalizeCountry($country_json) {
     $this->genericInternalize($country_json, (new PsApiCountry($this)), $this->countries);
+  }
+
+  private function internalizeMerchantType($merchant_type_json) {
+    $this->genericInternalize($merchant_type_json, (new PsApiMerchantType($this)), $this->merchant_types);
   }
 }
 
@@ -435,30 +484,36 @@ class PsApiMerchant extends PsApiResource {
     // Big case statement for each possible type of resource
     // Likely going to be using $this->reference a lot
     switch ($resource) {
-      case 'offers':
-	if (isset($this->offers)) {
-	  return $this->offers;
-	} else {
-	  $this->offers = array();
-	  foreach ($this->reference->resource('offers') as $offer) {
-	    if ($offer->attr('merchant') == $this->attr('id')) {
-	      $this->offers[] = $offer;
-	    }
+    case 'offers':
+      if (isset($this->offers)) {
+	return $this->offers;
+      } else {
+	$this->offers = array();
+	foreach ($this->reference->resource('offers') as $offer) {
+	  if ($offer->attr('merchant') == $this->attr('id')) {
+	    $this->offers[] = $offer;
 	  }
-	  return $this->offers;
 	}
-      case 'deals':
-	if (isset($this->deals)) {
-	  return $this->deals;
-	} else {
-	  $this->deals = array();
-	  foreach ($this->reference->resource('deals') as $deal) {
-	    if ($deal->attr('merchant') == $this->attr('id')) {
-	      $this->deals[] = $deal;
-	    }
+	return $this->offers;
+      }
+    case 'deals':
+      if (isset($this->deals)) {
+	return $this->deals;
+      } else {
+	$this->deals = array();
+	foreach ($this->reference->resource('deals') as $deal) {
+	  if ($deal->attr('merchant') == $this->attr('id')) {
+	    $this->deals[] = $deal;
 	  }
-	  return $this->deals;
 	}
+	return $this->deals;
+      }
+    case 'merchant_type':
+      return $this->reference->resourceById('merchant_type', $this->attr('merchant_type'));
+    case 'country':
+      return $this->reference->resourceById('country', $this->attr('country'));
+    case 'category':
+      return $this->reference->resourceById('category', $this->attr('category'));
     }
   }
 }
@@ -597,12 +652,52 @@ class PsApiDealType extends PsApiResource {
 
 class PsApiCountry extends PsApiResource {
    
+  private $merchants;
+
   public function __construct($reference) {
     parent::__construct($reference);
   }
   
   public function resource($resource) {
     switch($resource) {
+    case 'merchants':
+      if (isset($this->merchants)) {
+	return $this->merchants;
+      } else {
+	$this->merchants = array();
+	foreach ($this->reference->resource('merchants') as $merchant) {
+	  if (((string) $merchant->attr('country')) == ((string) $this->attr('id'))) {
+	    $this->merchants[] = $merchant;
+	  }
+	}
+	return $this->merchants;
+      }
+    }
+  }
+}
+
+class PsApiMerchantType extends PsApiResource {
+
+  private $merchants;
+
+  public function __construct($reference) {
+    parent::__construct($reference);
+  }
+
+  public function resource($resource) {
+    switch($resource) {
+    case 'merchants':
+      if (isset($this->merchants)) {
+	return $this->merchants;
+      } else {
+	$this->merchants = array();
+	foreach ($this->reference->resource('merchants') as $merchant) {
+	  if (((string) $merchant->attr('merchant_type')) == ((string) $this->attr('id'))) {
+	    $this->merchants[] = $merchant;
+	  }
+	}
+	return $this->merchants;
+      }
     }
   }
 }
