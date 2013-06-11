@@ -147,8 +147,8 @@ class PsApiCall {
 	break;
     }
     $this->logger->info('JSON processing completed.');
-    $this->logger->info('Internal processing time: ' . (string) (microtime(true) - $this->response_received_time));
-    $this->logger->info('Total call time: ' . (string) (microtime(true) - $this->start_time));
+    $this->logger->info('Internal processing time elapsed: ' . (string) (microtime(true) - $this->response_received_time));
+    $this->logger->info('Total call time elapsed: ' . (string) (microtime(true) - $this->start_time));
   }
 
   // Retrieves an array of the given type of resource. $resource should be plural
@@ -238,59 +238,61 @@ class PsApiCall {
     }
   }
 
-  // Processes and internalizes the information present in a returned chunk of JSON from the Products API
-  private function processProductsCall($parsed_json) {
-
-    // Load products
-    $products = $parsed_json['results']['products']['product'];
-    foreach ($products as $product) {
+  private function processProductsJson($products_json) {
+    foreach ($products_json as $product) {
       $this->logger->info('Internalizing product with ID=' . (string) $product['id']);
       $this->internalizeProduct($product);
     }
+  }
 
-    // Load deals
-    $deals = $parsed_json['results']['deals']['deal'];
-    foreach ($deals as $deal) {
+  private function processDealsJson($deals_json) {
+    foreach ($deals_json as $deal) {
       $this->logger->info('Internalizing deal with ID=' . (string) $deal['id']);
       $this->internalizeDeal($deal);
     }
+  }
 
-    // Load merchants
-    $merchants = $parsed_json['resources']['merchants']['merchant'];
-    foreach ($merchants as $merchant) {
+  private function processMerchantsJson($merchants_json) {
+    foreach ($merchants_json as $merchant) {
       $this->logger->info('Internalizing merchant with ID=' . (string) $merchant['id']);
       $this->internalizeMerchant($merchant);
     }
-    
-    // Load brands
-    $brands = $parsed_json['resources']['brands']['brand'];
-    foreach ($brands as $brand) {
+  }
+
+  private function processBrandsJson($brands_json) {
+    foreach ($brands_json as $brand) {
       $this->logger->info('Internalizing brand with ID=' . (string) $brand['id']);
       $this->internalizeBrand($brand);
     }
+  }
 
-    // Load categories from both matches and context
-    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // There's two places that categories exists. The 'matches' subsection, and the 'context' subsection
-      $categories = $parsed_json['resources']['categories']['matches']['category']; // Load from matches, if it exists
-      foreach ($categories as $category) {
+  private function processCategoriesJson($categories_json) {
+    foreach ($categories_json as $category) {
 	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
 	$this->internalizeCategory($category);
-      }
     }
-    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // There's two places that categories exists. The 'matches' subsection, and the 'context' subsection
-      $categories = $parsed_json['resources']['categories']['context']['category']; // Load from context, if it exists
-      foreach ($categories as $category) {
-	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
-	$this->internalizeCategory($category);
-      }
-    }
+  }
 
-    // Load deal types
-    $deal_types = $parsed_json['resources']['deal_types']['deal_type'];
-    foreach ($deal_types as $deal_type) {
+  private function processDealTypesJson($deal_types_json) {
+    foreach ($deal_types_json as $deal_type) {
       $this->logger->info('Internalizing deal type with ID=' . (string) $deal_type['id']);
       $this->internalizeDealType($deal_type);
     }
+  }
+
+  // Processes and internalizes the information present in a returned chunk of JSON from the Products API
+  private function processProductsCall($parsed_json) {
+    $this->processProductsJson($parsed_json['results']['products']['product']);
+    $this->processDealsJson($parsed_json['results']['deals']['deal']);
+    $this->processMerchantsJson($parsed_json['resources']['merchants']['merchant']);
+    $this->processBrandsJson($parsed_json['resources']['brands']['brand']);
+    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // Load from matches, if it exists
+      $this->processCategoriesJson($parsed_json['resources']['categories']['matches']['category']);
+    }
+    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // Load from context, if it exists
+      $this->processCategoriesjson($parsed_json['resources']['categories']['context']['category']);
+    }
+    $this->processDealTypesJson($parsed_json['resources']['deal_types']['deal_type']);
   }
 
   // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
@@ -626,7 +628,11 @@ class PsApiDummy extends PsApiResource {
   }
 
   public function resource($resource) {
-    return new PsApiDummy($reference, 'This element does not exist.');
+    if (isset($this->message)) {
+      return new PsApiDummy($reference, 'Parent object message: ' . $this->message);
+    } else {
+      return new PsApiDummy($reference);
+    }
   }
 }
 
