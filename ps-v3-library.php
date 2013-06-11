@@ -9,6 +9,10 @@
 // Ask about categories: context vs. matches, any sort of tree structure (even just parents)
 // Set up a better log system... Flag for logging to page vs. logging to system error log? Something like that. Fine for now.
 // Need to maintain order of elements in internal arrays...
+// Ask about why not all referenced categories are returned. For example, do a products search for keyword 'fork'
+// Some requests taking upwards of 4 seconds
+// Internal processing time isn't the issue; it's the API response time
+// Behavior when merchant/category isn't present, even though it's referenced somewhere in the API results
 
 // ================  Code   ================
 
@@ -63,10 +67,15 @@ class PsApiCall {
   private $deal_types;   // Associative array mapping ids to deal_types.
   private $countries;    // Associative array mapping ids to countries.
 
+  // Various internal fields
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
   private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
   private $logger;       // A Logger object used to log progress and errors
+
+  // For statistics and analysis
+  private $start_time;    // Time that PsApiCall->call was called
+  private $response_received_time; // Time that the API response was received
 
   // Constructs a PsApiCall object using the provided api key and catalog id.
   public function __construct($api_key, $catalog_id) {
@@ -93,6 +102,7 @@ class PsApiCall {
   // The values of $arguments must be relevant for the API specified by $call_type
   // Returns nothing.
   public function call($call_type, $arguments) {
+    $this->start_time = microtime(true);
     $this->logger->info('Setting up to call PopShops ' . $call_type . ' API...');
     if ($this->called) {
       $this->logger->error('Client attempted to call PsApiCall object more than once. Call aborted.');
@@ -111,6 +121,7 @@ class PsApiCall {
     $this->logger->info('Request URL: ' . $url);
     $this->logger->info('Sending request...');
     $raw_json = file_get_contents($url);
+    $this->response_received_time = microtime(true);
     $this->logger->info('JSON file retrieved');
     $parsed_json = json_decode($raw_json, true);
     $this->logger->info('JSON file decoded');
@@ -136,13 +147,15 @@ class PsApiCall {
 	break;
     }
     $this->logger->info('JSON processing completed.');
+    $this->logger->info('Internal processing time: ' . (string) (microtime(true) - $this->response_received_time));
+    $this->logger->info('Total call time: ' . (string) (microtime(true) - $this->start_time));
   }
 
   // Retrieves an array of the given type of resource. $resource should be plural
   // $sort_by can be one of 'relevance', 'price'
-  // $descending, if True, will make returned element 0 have the highest value of $sort_by, while the last element will have the lowest
-  // If $descending is False, the opposite will occur
-  public function resource($resource, $sort_by='relevance', $descending=True) {
+  // $descending, if true, will make returned element 0 have the highest value of $sort_by, while the last element will have the lowest
+  // If $descending is false, the opposite will occur
+  public function resource($resource, $sort_by='relevance', $descending=true) {
     switch($resource) {
     case 'products':
       return array_values($this->products);
@@ -418,11 +431,30 @@ class PsApiMerchant extends PsApiResource {
 
 class PsApiDeal extends PsApiResource {
  
+  private $deal_types;
+
   public function __construct($reference) {
     parent::__construct($reference);
   }
 
-  public function resource($key) {
+  public function resource($resource) {
+    switch ($resource) {
+    case 'merchant':
+      return $this->reference->resource_by_id('merchant', $this->attr('merchant'));
+    case 'deal_types':
+      if (isset($this->deal_types)) {
+	return $this->deal_types;
+      } else {
+	$this->deal_types = array();
+	$temp_types = explode(',', $this->attr('deal_type'));
+	foreach ($this->reference->resource('deal_types') as $deal_type) {
+	  if (in_array((string) $deal_type->attr('id'), $temp_types)) {
+	    $this->deal_types[] = $deal_type;
+	  }
+	}
+      }
+      return $this->deal_types;
+    }
   }
 }
 
@@ -455,6 +487,8 @@ class PsApiOffer extends PsApiResource {
 
 class PsApiBrand extends PsApiResource {
   
+  private $products;
+
   public function __construct($reference) {
     parent::__construct($reference);
   }
@@ -470,6 +504,20 @@ class PsApiCategory extends PsApiResource {
   }
   
   public function resource($resource) {
+    switch($resource) {
+    case 'products':
+      if (isset($this->products)) {
+	return $this->products;
+      } else {
+	$this->products = array();
+	foreach ($this->reference->resource('products') as $product) {
+	  if (((string) $product->attr('category')) == ((string) $this->attr('id'))) {
+	    $this->products[] = $product;
+	  }
+	}
+      }
+      return $this->products;
+    }
   }
 }
 

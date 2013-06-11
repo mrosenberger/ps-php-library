@@ -17,19 +17,23 @@
       $tmp_api_key = 'd1lg0my9c6y3j5iv5vkc6ayrd';
       $tmp_catalog_id = 'dp4rtmme6tbhugpv6i59yiqmr';
       $api = new PsApiCall($tmp_api_key, $tmp_catalog_id);
-      $api->call('products', array('product' => '3393258'));
+      $api->call('products', array('keyword' => 'wallet'));
     ?>
     <hr>
     <h4>
-      Demo of library capabilities (look at the PHP source to see what's going on):
+      Demo of library capabilities (look at the PHP source to see what is going on):
     </h4>
     <?php
-      // The following code is intentionally over-complicated, just to show off the connections the library can make:
-      $offer = $api->resource('merchants')[0]->resource('offers')[0];
-      print('The merchant "' . $offer->resource('merchant')->attr('name') . 
-	    '" has an offer with the name "' . $offer->attr('name') . 
-	    '" for the product called "' . $offer->resource('product')->attr('name') . '"');
-      foreach ($api->resource('deals') as $deal) print('<br>' . $deal->attr('id'));
+      foreach ($api->resource('categories') as $category) {
+	print('=CATEGORY: ' . $category->attr('name') . ' -- ' . $category->attr('id') . '<br>');
+	foreach ($category->resource('products') as $product) {
+	  print('==PRODUCT: ' . $product->attr('name') . '<br>');
+	  foreach($product->resource('offers') as $offer) {
+	    print('===OFFER: ' . $offer->attr('name') . '<br>');
+	    print('====MERCHANT: ' . $offer->resource('merchant')->attr('name') . '<br>');
+	  }
+	}
+      }
     ?>
   </body>
 </html>
