@@ -431,18 +431,18 @@ class PsApiCall {
 
 abstract class PsApiResource {
   
-  protected $attr;
+  protected $attributes;
   protected $reference;
   
   public function __construct($reference) {
     $this->reference = $reference;
-    $this->attr = array();
+    $this->attributes = array();
   }
 
   // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
   public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
+    if (array_key_exists($attribute, $this->attributes)) {
+      return $this->attributes[$attribute];
     } else {
       return 'PopShops API Error: Invalid attribute passed to ' . get_class($this) . '->attr: ' . $attribute;
     }
@@ -450,7 +450,7 @@ abstract class PsApiResource {
 
   // Sets the given attribute to the given value. Should not be used by end-users of the PsApiCall library
   public function setAttr($attribute, $value) {
-    $this->attr[$attribute] = $value;
+    $this->attributes[$attribute] = $value;
   }
 
   // Must be implemented by extended classes. Retrieves the specified resource (or array of resources) and returns it
@@ -468,6 +468,30 @@ class PsApiProduct extends PsApiResource {
 
   public function addOffer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
     $this->offers[] = $offer;
+  }
+
+  public function largestImageUrl() {
+    if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else {
+      return 'No image url provided for product with ID=' . $this->attributes['id'];
+    }
+  }
+
+  public function smallestImageUrl() {
+    if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else {
+      return 'No image url provided for product with ID=' . $this->attributes['id'];
+    }
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
@@ -572,6 +596,30 @@ class PsApiOffer extends PsApiResource {
 
   public function setProduct($product) {
     $this->product = $product;
+  }
+
+  public function largestImageUrl() {
+    if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else {
+      return 'No image url provided for offer with ID=' . $this->attributes['id'];
+    }
+  }
+
+  public function smallestImageUrl() {
+    if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else {
+      return 'No image url provided for offer with ID=' . $this->attributes['id'];
+    }
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
