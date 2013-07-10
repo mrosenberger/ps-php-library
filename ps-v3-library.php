@@ -67,6 +67,7 @@ class PsApiCall {
   private $deal_types;     // Associative array mapping ids to deal_types.
   private $countries;      // Associative array mapping ids to countries.
   private $merchant_types; // Associative array mapping ids to merchant_types.
+  private $category_tree;  // Special case data structure allowing for a nice, tree based approach to looking at categories
 
   // Various internal fields
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
@@ -88,7 +89,9 @@ class PsApiCall {
     foreach ($valid_options as $option) {
       if (isset($options[$option])) {
 	if ($option == 'logging') {
-	  $this->logger->enable();
+	  if ($options[$option]) {
+	    $this->logger->enable();
+	  }
 	} else {
 	  $this->options[$option] = $options[$option];
 	}
@@ -118,7 +121,7 @@ class PsApiCall {
       return;
     }
 
-    if (! in_array($call_type, array('products', 'merchants', 'deals'))) {
+    if (! in_array($call_type, array('products', 'merchants', 'deals', 'categories'))) {
       $this->logger->error("Invalid call_type '$call_type' was passed to PsApiCall->call. Call aborted.");
       return;
     }
@@ -150,6 +153,11 @@ class PsApiCall {
     $this->logger->info('Total call time elapsed: ' . (string) (microtime(true) - $this->start_time));
   }
 
+  public function getCategoryTree() {
+    if (isset($this->category_tree)) {
+      return $this->category_tree;
+    }
+  }
   // Retrieves an array of the given type of resource. $resource should be plural
   public function resource($resource) {
     $resource = strtolower($resource);
@@ -212,6 +220,18 @@ class PsApiCall {
   private function processCountriesJson($json) {
     $this->processObjectJson($json, 'PsApiCountry', 'countries');
   }
+  
+  private function buildCategoryTree($json) {
+    $node = new PsApiCategoryTree($json['name'], $json['id']);
+    if (array_key_exists('leaf', $json)) {
+      return $node;
+    } else {
+      foreach($json['categories']['category'] as $cat) {
+	$node->addChild($this->buildCategoryTree($cat));
+      }
+      return $node;
+    }
+  }
 
   private function processResults($json) {
     if (isset($json['results'])) {
@@ -221,6 +241,10 @@ class PsApiCall {
         $this->processMerchantsJson($json['results']['merchants']['merchant']);
       if (isset($json['results']['deals']))
         $this->processDealsJson($json['results']['deals']['deal']);
+      if (isset($json['results']['categories'])) {
+	$this->logger->info('Building category tree from parsed JSON...');
+	$this->category_tree = $this->buildCategoryTree($json['results']['categories']['category']['0']);
+      }
     }
     if (isset($json['resources'])) {
       if (isset($json['resources']['merchants']))
@@ -508,7 +532,36 @@ class PsApiCategory extends PsApiResource {
       }
     }
   }
+}
 
+class PsApiCategoryTree {
+  
+  private $children;
+  private $name;
+  private $id;
+  
+  public function __construct($name, $id) {
+    $this->name = $name;
+    $this->id = $id;
+    $this->children = array();
+  }
+  
+  public function addChild($child) {
+    $this->children[] = $child;
+  }
+  
+  public function getName() {
+    return $this->name;
+  }
+  
+  public function getId() {
+    return $this->id;
+  }
+  
+  public function getChildren() {
+    return $this->children;
+  }
+  
 }
 
 class PsApiDealType extends PsApiResource {
