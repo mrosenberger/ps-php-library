@@ -74,6 +74,8 @@ class PsApiCall {
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
   private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
   private $logger;       // A Logger object used to log progress and errors
+  private $url_mode;     // Enables url mode, where options are loaded from the GET query string
+  private $url_mode_prefix; // If url mode is enabled, this specifies the prefix that is prepended to all parameters
 
   // For statistics and analysis
   private $start_time;             // Time that PsApiCall->get was called
@@ -84,17 +86,45 @@ class PsApiCall {
 
     $this->logger = new PsApiLogger;
 
-    $valid_options = array('account', 'catalog', 'logging');
+    //$valid_options = array('account', 'catalog', 'logging', 'url-mode', 'url-mode-prefix');
 
-    foreach ($valid_options as $option) {
+    $this->url_mode = false;
+    $this->url_mode_prefix = 'psapi-';
+
+    /*foreach ($valid_options as $option) {
       if (isset($options[$option])) {
 	if ($option == 'logging') {
 	  if ($options[$option]) {
 	    $this->logger->enable();
 	  }
+	} elseif ($option == 'url-mode') {
+	  if ($options[$option]) {
+	    $this->url_mode = true;
+	  }
+	} elseif ($option == 'url-mode-prefix') {
+	  $this->url_mode_prefix = $options[$option];
 	} else {
 	  $this->options[$option] = $options[$option];
 	}
+	}*/
+
+    foreach ($options as $option=>$value) {
+      switch ($option) {
+      case 'logging':
+	if ($options['logging']) $this->logger->enable();
+	break;
+      case 'url-mode':
+	if ($value) $this->url_mode = true;
+	break;
+      case 'url-mode-prefix':
+	$this->url_mode_prefix = $value;
+	break;
+      case 'account':
+	$this->options['account'] = $value;
+	break;
+      case 'catalog':
+	$this->options['catalog'] = $value;
+	break;
       }
     }
 
@@ -106,6 +136,35 @@ class PsApiCall {
     }
   }
 
+  private function loadOptionsGeneric($valid_options) {
+    foreach ($_GET as $opt=>$val) {
+      //$replaced = str_replace($this->url_mode_prefix, '', $opt);
+      if (strpos($opt, $this->url_mode_prefix) == 0) {
+	$right = substr($opt, strlen($this->url_mode_prefix));
+	if (in_array($right, $valid_options)) {
+	  $this->logger->info('Option "' . $right . '" loaded from url with value="' . $val . '"');
+	  $this->options[$right] = $val;
+	}
+      }
+    }
+  }
+
+  private function loadOptionsFromGetParams() {
+    $valid_product_call_params = array('category', 'include_discounts', 'keyword', 'keyword_description', 'keyword_ean', 'keyword_identifier',
+				       'keyword_isbn', 'keyword_mpn', 'keyword_name', 'keyword_person', 'keyword_upc', 'keyword_sku',
+				       'merchant', 'merchant_type', 'page', 'percent_off', 'percent_off_max', 'percent_off_min', 'postal_code',
+				       'price', 'price_max', 'percent_off_min', 'product', 'product_spec', 'include_identifiers',
+				       'results_per_page', 'session', 'tracking_id');
+    $valid_merchant_call_params = array('alpha', 'category', 'keyword', 'merchant', 'network', 'page', 'results_per_page', 'tracking_id');
+    $valid_deal_call_params = array();
+    $valid_category_call_params = array();
+    if ($this->call_type == 'products') {
+      $this->loadOptionsGeneric($valid_product_call_params);
+    } elseif ($this->call_type == 'merchants') {
+      $this->loadOptionsGeneric($valid_merchant_call_params);
+    }
+  }
+    
   // Calls the specified PopShops API, then parses the results into internal data structures. 
   // Parameter $call_type is a string. Valid values are 'products', 'merchants', or 'deals'. 
   // The value of $call_type directly selects which API will be called.
@@ -127,6 +186,11 @@ class PsApiCall {
     }
 
     $this->call_type = $call_type;
+
+    if ($this->url_mode) {
+      $this->loadOptionsFromGetParams();
+    }
+
     $this->called = true;
     $this->options = array_merge($this->options, $arguments);
     $formatted_options = array();
