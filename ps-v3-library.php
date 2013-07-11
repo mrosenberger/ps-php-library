@@ -86,27 +86,8 @@ class PsApiCall {
 
     $this->logger = new PsApiLogger;
 
-    //$valid_options = array('account', 'catalog', 'logging', 'url-mode', 'url-mode-prefix');
-
     $this->url_mode = false;
     $this->url_mode_prefix = 'psapi-';
-
-    /*foreach ($valid_options as $option) {
-      if (isset($options[$option])) {
-	if ($option == 'logging') {
-	  if ($options[$option]) {
-	    $this->logger->enable();
-	  }
-	} elseif ($option == 'url-mode') {
-	  if ($options[$option]) {
-	    $this->url_mode = true;
-	  }
-	} elseif ($option == 'url-mode-prefix') {
-	  $this->url_mode_prefix = $options[$option];
-	} else {
-	  $this->options[$option] = $options[$option];
-	}
-	}*/
 
     foreach ($options as $option=>$value) {
       switch ($option) {
@@ -138,7 +119,6 @@ class PsApiCall {
 
   private function loadOptionsGeneric($valid_options) {
     foreach ($_GET as $opt=>$val) {
-      //$replaced = str_replace($this->url_mode_prefix, '', $opt);
       if (strpos($opt, $this->url_mode_prefix) == 0) {
 	$right = substr($opt, strlen($this->url_mode_prefix));
 	if (in_array($right, $valid_options)) {
@@ -150,19 +130,15 @@ class PsApiCall {
   }
 
   private function loadOptionsFromGetParams() {
-    $valid_product_call_params = array('category', 'include_discounts', 'keyword', 'keyword_description', 'keyword_ean', 'keyword_identifier',
+    $valid_products_call_params = array('category', 'include_discounts', 'keyword', 'keyword_description', 'keyword_ean', 'keyword_identifier',
 				       'keyword_isbn', 'keyword_mpn', 'keyword_name', 'keyword_person', 'keyword_upc', 'keyword_sku',
 				       'merchant', 'merchant_type', 'page', 'percent_off', 'percent_off_max', 'percent_off_min', 'postal_code',
 				       'price', 'price_max', 'percent_off_min', 'product', 'product_spec', 'include_identifiers',
 				       'results_per_page', 'session', 'tracking_id');
-    $valid_merchant_call_params = array('alpha', 'category', 'keyword', 'merchant', 'network', 'page', 'results_per_page', 'tracking_id');
-    $valid_deal_call_params = array();
-    $valid_category_call_params = array();
-    if ($this->call_type == 'products') {
-      $this->loadOptionsGeneric($valid_product_call_params);
-    } elseif ($this->call_type == 'merchants') {
-      $this->loadOptionsGeneric($valid_merchant_call_params);
-    }
+    $valid_merchants_call_params = array('alpha', 'category', 'keyword', 'merchant', 'network', 'page', 'results_per_page', 'tracking_id');
+    $valid_deals_call_params = array();
+    $valid_categories_call_params = array();
+    $this->loadOptionsGeneric(${'valid_' . $this->call_type . '_call_params'});
   }
     
   // Calls the specified PopShops API, then parses the results into internal data structures. 
@@ -232,7 +208,7 @@ class PsApiCall {
     }
   }
 
-  // Retrieves an individual resource by its id. Accepts plural or singular $resource; behavior is identical
+  // Retrieves an individual resource by its id. Accepts plural $resource
   public function resourceById($resource, $id) {
     if (array_key_exists( $id, $this->{$resource})) {
       return $this->{$resource}[$id];
