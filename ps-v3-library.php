@@ -182,12 +182,49 @@ class PsApiCall {
     return $result_string;
   }
 
-  public function getQueryString($options_modifications=array()) {
+  public function getQueryString($option_modifications=array()) {
     $param_string = $this->getQueryParamString($option_modifications);
     $host = $_SERVER['SERVER_NAME'];
     $path = explode('?', $_SERVER['REQUEST_URI'])[0];
     $protocol = strtolower(explode('/', $_SERVER['SERVER_PROTOCOL'])[0]);
     return $protocol . '://' . $host . $path . '?' . $param_string;
+  }
+
+  public function paginate($page) { // Page can be an integer or a string representing an integer
+    $page = (string) page;
+    return $this->getQueryString(array('page' => $page));
+  } 
+
+  public function nextPage() {
+    if (isset($this->options['page'])) {
+      if (intval($this->options['page']) > 99) {
+	return $this->getQueryString(array('page' => 100));
+      } else {
+	return $this->getQueryString(array('page' => ($this->options['page'] + 1)));
+      }
+    } else {
+      return $this->getQueryString(array('page' => 2));
+    }
+  }
+
+  public function prevPage() {
+    if (isset($this->options['page'])) {
+      if (intval($this->options['page']) < 2) {
+	return $this->getQueryString(array('page' => 1));
+      } else { 
+	return $this->getQueryString(array('page' => ($this->options['page'] - 1)));
+      }
+    } else {
+      return $this->getQueryString(array('page' => 1));
+    }
+  }
+
+  public function previousPage() {
+    return $this->prevPage();
+  }
+
+  public function modifyQuery($option_modifications) {
+    return $this->getQueryString($option_modifications);
   }
 
   // Calls the specified PopShops API, then parses the results into internal data structures. 

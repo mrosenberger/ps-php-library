@@ -15,7 +15,7 @@
     </h4>
     <?php
       $api = new PsApiCall(array('account' => 'd1lg0my9c6y3j5iv5vkc6ayrd', 'catalog' => 'dp4rtmme6tbhugpv6i59yiqmr', 'logging' => true, 
-				 'url-mode-prefix' => 'popshops-api-', 'url-mode' => true));
+				 'url-mode-prefix' => 'psapi-', 'url-mode' => true));
       $api->get('products', array('keyword' => 'wallet'));
     ?>
     <hr>
@@ -25,7 +25,9 @@
     <?php
       //print('Request URI: ' . $_SERVER['REQUEST_URI'] . '<br>');
 //print('Query string: ' . $api->getQueryParamString() . '<br>');
-    print('Computed string: ' . $api->getQueryString() . '<br>');
+      //print('Computed string: ' . $api->getQueryString() . '<br>');
+    print('Next page string: ' . $api->nextPage() . '<br>');
+    print('Prev page string: ' . $api->prevPage() . '<br>');
     foreach ($api->resource('deal_types') as $deal_type) {
       print('DEAL TYPE: ' . $deal_type->attr('name') . '<br>');
       foreach ($deal_type->resource('deals') as $deal) {
