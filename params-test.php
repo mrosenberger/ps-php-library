@@ -23,6 +23,9 @@
       Demo of library deal capabilities (look at the PHP source to see what is going on):
     </h4>
     <?php
+      //print('Request URI: ' . $_SERVER['REQUEST_URI'] . '<br>');
+//print('Query string: ' . $api->getQueryParamString() . '<br>');
+    print('Computed string: ' . $api->getQueryString() . '<br>');
     foreach ($api->resource('deal_types') as $deal_type) {
       print('DEAL TYPE: ' . $deal_type->attr('name') . '<br>');
       foreach ($deal_type->resource('deals') as $deal) {

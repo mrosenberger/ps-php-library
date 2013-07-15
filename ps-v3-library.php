@@ -98,7 +98,11 @@ class PsApiCall {
 	if ($value) $this->url_mode = true;
 	break;
       case 'url-mode-prefix':
-	$this->url_mode_prefix = $value;
+	if (strlen($value) > 0) {
+	  $this->url_mode_prefix = $value;
+	} else {
+	  $this->logger->error('Invalid url mode prefix. Must be at least one character.');
+	}
 	break;
       case 'account':
 	$this->options['account'] = $value;
@@ -140,7 +144,52 @@ class PsApiCall {
     $valid_categories_call_params = array();
     $this->loadOptionsGeneric(${'valid_' . $this->call_type . '_call_params'});
   }
-    
+
+  public function getQueryParamString($option_modifications=array()) {
+    if (! $this->called) {
+      $this->logger->error('PopShops API error: Attempt to get query string before performing API call.');
+      return 'PopShops API error: Attempt to get query string before performing API call.';
+    }
+    $tmp_options = $this->options;
+    foreach ($option_modifications as $opt=>$value) {
+      $tmp_options[$opt] = $value;
+    }
+    $output_params = array();
+    // output_params has two sets of entries: options from the internal options array (without account and catalog), and
+    //   options passed as part of the $_GET (which aren't used at all by this library, but are nice to pass along anyways)
+    foreach ($tmp_options as $opt=>$value) { // First add the internal options (prefixed with the url mode prefix)
+      if (($opt != 'account') and ($opt != 'catalog')) {
+	$output_params[$this->url_mode_prefix . $opt] = $value;
+      }
+    }
+    foreach ($_GET as $param=>$value) { // Now add the non-internal params (not used interally, but it's friendly to pass them along)
+      if (strpos($param, $this->url_mode_prefix) === 0) {
+	// Skip over any params with the prefix
+      } else {
+	$output_params[$param] = $value;
+      }
+    }
+    $result_string = '';
+    $first = true;
+    foreach ($output_params as $opt=>$value) {
+      if ($first) {
+	$first = false;
+      } else {
+	$result_string .= '&';
+      }
+      $result_string .= $opt . '=' . $value;
+    }
+    return $result_string;
+  }
+
+  public function getQueryString($options_modifications=array()) {
+    $param_string = $this->getQueryParamString($option_modifications);
+    $host = $_SERVER['SERVER_NAME'];
+    $path = explode('?', $_SERVER['REQUEST_URI'])[0];
+    $protocol = strtolower(explode('/', $_SERVER['SERVER_PROTOCOL'])[0]);
+    return $protocol . '://' . $host . $path . '?' . $param_string;
+  }
+
   // Calls the specified PopShops API, then parses the results into internal data structures. 
   // Parameter $call_type is a string. Valid values are 'products', 'merchants', or 'deals'. 
   // The value of $call_type directly selects which API will be called.
@@ -150,23 +199,18 @@ class PsApiCall {
   public function get($call_type='products', $arguments=array()) {
     $this->start_time = microtime(true);
     $this->logger->info("Setting up to call PopShops $call_type API...");
-
     if ($this->called) {
       $this->logger->error('Client attempted to call PsApiCall object more than once. Call aborted.');
       return;
     }
-
     if (! in_array($call_type, array('products', 'merchants', 'deals', 'categories'))) {
       $this->logger->error("Invalid call_type '$call_type' was passed to PsApiCall->call. Call aborted.");
       return;
     }
-
     $this->call_type = $call_type;
-
     if ($this->url_mode) {
       $this->loadOptionsFromGetParams();
     }
-
     $this->called = true;
     $this->options = array_merge($this->options, $arguments);
     $formatted_options = array();
@@ -600,8 +644,7 @@ class PsApiCategoryTree {
   
   public function getChildren() {
     return $this->children;
-  }
-  
+  }  
 }
 
 class PsApiDealType extends PsApiResource {
