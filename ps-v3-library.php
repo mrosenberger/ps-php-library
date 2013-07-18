@@ -516,6 +516,62 @@ class PsApiProduct extends PsApiResource {
         return $this->reference->resourceById('brands', $this->attr('brand'));
     }
   }
+
+  public function getBrandId() {
+    return $this->attr('brand');
+  }
+  
+  public function getCategoryId() {
+    return $this->attr('category');
+  }
+  
+  public function getDescription() {
+    return $this->attr('description');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getImageUrlLarge() {
+    return $this->attr('image_url_large');
+  }
+  
+  public function getImageUrlMedium() {
+    return $this->attr('image_url_medium');
+  }
+  
+  public function getImageUrlSmall() {
+    return $this->attr('image_url_small');
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getOfferCount() {
+    return $this->attr('offer_count');
+  }
+  
+  public function getPriceMax() {
+    return $this->attr('price_max');
+  }
+  
+  public function getPriceMin() {
+    return $this->attr('price_min');
+  }
+  
+  public function getBrand() {
+    return $this->resource('brand');
+  }
+  
+  public function getCategory() {
+    return $this->resource('category');
+  }
+  
+  public function getOffers() {
+    return $this->resource('offers');
+  }
 }
 
 class PsApiMerchant extends PsApiResource {
@@ -561,6 +617,70 @@ class PsApiMerchant extends PsApiResource {
       return $this->reference->resourceById('categories', $this->attr('category'));
     }
   }
+  
+  public function getCategoryId() {
+    return $this->attr('category');
+  }
+  
+  public function getCountryId() {
+    return $this->attr('country');
+  }
+  
+  public function getDealCount() {
+    return $this->attr('deal_count');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getLogoUrl() {
+    return $this->attr('logo_url');
+  }
+  
+  public function getMerchantTypeId() {
+    return $this->attr('merchant_type');
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getNetworkId() {
+    return $this->attr('network');
+  }
+  
+  public function getNetworkMerchantId() {
+    return $this->attr('network_merchant_id');
+  }
+  
+  public function getProductCount() {
+    return $this->attr('product_count');
+  }
+  
+  public function getUrl() {
+    return $this->attr('url');
+  }
+  
+  public function getOffers() {
+    return $this->resource('offers');
+  }
+  
+  public function getDeals() {
+    return $this->resource('deals');
+  }
+  
+  public function getMerchantType() {
+    return $this->resource('merchant_type');
+  }
+  
+  public function getCountry() {
+    return $this->resource('country');
+  }
+  
+  public function getCategory() {
+    return $this->resource('category');
+  }
 }
 
 class PsApiDeal extends PsApiResource {
@@ -583,6 +703,62 @@ class PsApiDeal extends PsApiResource {
 	return $this->deal_types;
       }
     }
+  }
+  
+  public function getCode() {
+    return $this->attr('code');
+  }
+  
+  public function getDealTypeId() {
+    return $this->attr('deal_type');
+  }
+  
+  public function getDescription() {
+    return $this->attr('description');
+  }
+  
+  public function getEndOn() {
+    return $this->attr('end_on');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getImageUrl() {
+    return $this->attr('image_url');
+  }
+  
+  public function getMerchantId() {
+    return $this->attr('merchant');
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getRestrictions() {
+    return $this->attr('restrictions');
+  }
+  
+  public function isSiteWide() {
+    return $this->attr('site_wide') === 'yes';
+  }
+  
+  public function getStartOn() {
+    return $this->attr('start_on');
+  }
+  
+  public function getUrl() {
+    return $this->attr('url');
+  }
+  
+  public function getMerchant() {
+    return $this->resource('merchant');
+  }
+  
+  public function getDealTypes() {
+    return $this->resource('deal_types');
   }
 }
 
@@ -627,6 +803,90 @@ class PsApiOffer extends PsApiResource {
         return $this->reference->resourceById('merchants', $this->attr('merchant'));
     }
   }
+  
+  public function getCondition() {
+    return $this->attr('condition');
+  }
+  
+  public function getCurrencyIso() {
+    return $this->attr('currency_iso');
+  }
+  
+  public function getCurrencySymbol() {
+    return $this->attr('currency_symbol');
+  }
+  
+  public function getDescription() {
+    return $this->attr('description');
+  }
+  
+  public function getEstimatedShipping() {
+    return $this->attr('estimated_shipping');
+  }
+  
+  public function getEstimatedSalesTaxRate() {
+    return $this->attr('estimated_sales_tax_rate');
+  }
+  
+  public function getEstimatedSalesTax() {
+    return $this->attr('estimated_sales_tax');
+  }
+  
+  public function getEstimatedPriceTotal() {
+    return $this->attr('estimated_price_total');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getImageUrlLarge() {
+    return $this->attr('image_url_large');
+  }
+  
+  public function getImageUrlMedium() {
+    return $this->attr('image_url_medium');
+  }
+  
+  public function getImageUrlSmall() {
+    return $this->attr('image_url_small');
+  }
+  
+  public function getMerchantId() {
+    return $this->attr('merchant');
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getPercentOff() {
+    return $this->attr('percent_off');
+  }
+  
+  public function getPriceMerchant() {
+    return $this->attr('price_merchant');
+  }
+  
+  public function getPriceRetail() {
+    return $this->attr('price_retail');
+  }
+  
+  public function getSku() {
+    return $this->attr('sku');
+  }
+  
+  public function getUrl() {
+    return $this->attr('url');
+  }
+  
+  public function getMerchant() {
+    return $this->resource('merchant');
+  }
+  
+  public function getProduct() {
+    return $this->resource('product');
+  }
 }
 
 class PsApiBrand extends PsApiResource {
@@ -649,6 +909,22 @@ class PsApiBrand extends PsApiResource {
       }
     }
   }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getCount() {
+    return $this->attr('count');
+  }
+  
+  public function getProducts() {
+    return $this->resource('products');
+  }
 }
 
 class PsApiCategory extends PsApiResource {
@@ -668,6 +944,26 @@ class PsApiCategory extends PsApiResource {
         return $this->products;
       }
     }
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getCount() {
+    return $this->attr('count');
+  }
+  
+  public function isLeaf() {
+    return array_key_exists('leaf', $this->attributes);
+  }
+  
+  public function getProducts() {
+    return $this->resource('products');
   }
 }
 
@@ -723,6 +1019,22 @@ class PsApiDealType extends PsApiResource {
       }
     }
   }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getCount() {
+    return $this->attr('count');
+  }
+  
+  public function getDeals() {
+    return $this->resource('deals');
+  }
 }
 
 class PsApiCountry extends PsApiResource {
@@ -745,6 +1057,22 @@ class PsApiCountry extends PsApiResource {
       }
     }
   }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getCount() {
+    return $this->attr('count');
+  }
+  
+  public function getMerchants() {
+    return $this->resource('merchants');
+  }
 }
 
 class PsApiMerchantType extends PsApiResource {
@@ -766,6 +1094,22 @@ class PsApiMerchantType extends PsApiResource {
         return $this->merchants;
       }
     }
+  }
+  
+  public function getName() {
+    return $this->attr('name');
+  }
+  
+  public function getId() {
+    return $this->attr('id');
+  }
+  
+  public function getCount() {
+    return $this->attr('count');
+  }
+  
+  public function getMerchants() {
+    return $this->resource('merchants');
   }
 }
 
