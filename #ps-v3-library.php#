@@ -3,12 +3,16 @@
 // ================ Musings ================
 
 // Maybe provide a nice tree structure pre-built for categories? --Not viable, not enough categories returned with API call
-// Three different inherited PopShopsApi types? Or just a flag? --Nope, just a flag. Much easier
 // Easy way to explain attr vs resource in the documentation: attr gives you values, resource gives you objects
 // Instead of "resource", maybe there really should be individual methods for each, because often, you need to pass an argument
 // For example, offers for a given merchant AND product
 // Ask about categories: context vs. matches, any sort of tree structure (even just parents)
 // Set up a better log system... Flag for logging to page vs. logging to system error log? Something like that. Fine for now.
+// Need to maintain order of elements in internal arrays...
+// Ask about why not all referenced categories are returned. For example, do a products search for keyword 'fork'
+// Some requests taking upwards of 4 seconds
+// Internal processing time isn't the issue; it's the API response time
+// Behavior when merchant/category isn't present, even though it's referenced somewhere in the API results
 
 // ================  Code   ================
 
@@ -50,28 +54,177 @@ class PsApiLogger {
 
 }
 
-// PopShopsApi: A one-shot API request against PopShops' Merchants, Products, or Deals API
-class PopShopsApi {
+// PsApiCall: A one-shot API request against PopShops' Merchants, Products, or Deals API
+class PsApiCall {
 
-  private $merchants;    // Associative array mapping ids to merchants.
-  private $products;     // Associative array mapping ids to products.
-  private $deals;        // Associative array mapping ids to deals.
-  private $offers;       // Associative array mapping ids to offers.
-  private $categories;   // Associative array mapping ids to categories.
-  private $brands;       // Associative array mapping ids to brands.
-  private $deal_types;   // Associative array mapping ids to deal_types.
+  // Associative arrays mapping ids to objects
+  private $merchants;      // Associative array mapping ids to merchants.
+  private $products;       // Associative array mapping ids to products.
+  private $deals;          // Associative array mapping ids to deals.
+  private $offers;         // Associative array mapping ids to offers.
+  private $categories;     // Associative array mapping ids to categories.
+  private $brands;         // Associative array mapping ids to brands.
+  private $deal_types;     // Associative array mapping ids to deal_types.
+  private $countries;      // Associative array mapping ids to countries.
+  private $merchant_types; // Associative array mapping ids to merchant_types.
+  private $category_tree;  // Special case data structure allowing for a nice, tree based approach to looking at categories
+
+  // Various internal fields
   private $options;      // Associative array of option=>value pairs to be passed to the API when called.
   private $call_type;    // One of ['merchants', 'products', 'deals']. Specifies which api will be called.
-  private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PopShopsApi object.
+  private $called;       // Set to true once API has been called once. Enforces single-use behavior of the PsApiCall object.
   private $logger;       // A Logger object used to log progress and errors
+  private $url_mode;     // Enables url mode, where options are loaded from the GET query string
+  private $url_mode_prefix; // If url mode is enabled, this specifies the prefix that is prepended to all parameters
 
-  // Constructs a PopShopsApi object using the provided api key and catalog id.
-  public function __construct($api_key, $catalog_id) {
-    $this->options['account'] = $api_key;
-    $this->options['catalog'] = $catalog_id;
+  // For statistics and analysis
+  private $start_time;             // Time that PsApiCall->get was called
+  private $response_received_time; // Time that the API response was received
+
+  // Constructs a PsApiCall object using the provided api key and catalog id.
+  public function __construct($options) {
+
     $this->logger = new PsApiLogger;
-    $this->logger->enable();
+
+    $this->url_mode = false;
+    $this->url_mode_prefix = 'psapi_';
+
+    foreach ($options as $option=>$value) {
+      switch ($option) {
+      case 'logging':
+	if ($options['logging']) $this->logger->enable();
+	break;
+      case 'url-mode':
+	if ($value) $this->url_mode = true;
+	break;
+      case 'url-mode-prefix':
+	if (strlen($value) > 0) {
+	  $this->url_mode_prefix = $value;
+	} else {
+	  $this->logger->error('Invalid url mode prefix. Must be at least one character.');
+	}
+	break;
+      case 'account':
+	$this->options['account'] = $value;
+	break;
+      case 'catalog':
+	$this->options['catalog'] = $value;
+	break;
+      }
+    }
+
     $this->called = false;
+
+    $resources = array('merchants', 'products', 'deals', 'offers', 'categories', 'brands', 'deal_types', 'countries', 'merchant_types');
+    foreach ($resources as $resource) {
+      $this->{$resource} = array();
+    }
+  }
+
+  private function loadOptionsGeneric($valid_options) {
+    foreach ($_GET as $opt=>$val) {
+      if (strpos($opt, $this->url_mode_prefix) == 0) {
+	$right = substr($opt, strlen($this->url_mode_prefix));
+	if (in_array($right, $valid_options)) {
+	  $this->logger->info('Option "' . $right . '" loaded from url with value="' . $val . '"');
+	  $this->options[$right] = $val;
+	}
+      }
+    }
+  }
+
+  private function loadOptionsFromGetParams() {
+    $valid_products_call_params = array('category', 'include_discounts', 'keyword', 'keyword_description', 'keyword_ean', 'keyword_identifier',
+				       'keyword_isbn', 'keyword_mpn', 'keyword_name', 'keyword_person', 'keyword_upc', 'keyword_sku',
+				       'merchant', 'merchant_type', 'page', 'percent_off', 'percent_off_max', 'percent_off_min', 'postal_code',
+				       'price', 'price_max', 'percent_off_min', 'product', 'product_spec', 'include_identifiers',
+				       'results_per_page', 'session', 'tracking_id');
+    $valid_merchants_call_params = array('alpha', 'category', 'keyword', 'merchant', 'network', 'page', 'results_per_page', 'tracking_id');
+    $valid_deals_call_params = array();
+    $valid_categories_call_params = array();
+    $this->loadOptionsGeneric(${'valid_' . $this->call_type . '_call_params'});
+  }
+
+  public function getQueryParamString($option_modifications=array()) {
+    if (! $this->called) {
+      $this->logger->error('PopShops API error: Attempt to get query string before performing API call.');
+      return 'PopShops API error: Attempt to get query string before performing API call.';
+    }
+    $tmp_options = $this->options;
+    foreach ($option_modifications as $opt=>$value) {
+      $tmp_options[$opt] = $value;
+    }
+    $output_params = array();
+    // output_params has two sets of entries: options from the internal options array (without account and catalog), and
+    //   options passed as part of the $_GET (which aren't used at all by this library, but are nice to pass along anyways)
+    foreach ($tmp_options as $opt=>$value) { // First add the internal options (prefixed with the url mode prefix)
+      if (($opt != 'account') and ($opt != 'catalog')) {
+	$output_params[$this->url_mode_prefix . $opt] = $value;
+      }
+    }
+    foreach ($_GET as $param=>$value) { // Now add the non-internal params (not used interally, but it's friendly to pass them along)
+      if (strpos($param, $this->url_mode_prefix) === 0) {
+	// Skip over any params with the prefix
+      } else {
+	$output_params[$param] = $value;
+      }
+    }
+    $result_string = '';
+    $first = true;
+    foreach ($output_params as $opt=>$value) {
+      if ($first) {
+	$first = false;
+      } else {
+	$result_string .= '&';
+      }
+      $result_string .= $opt . '=' . $value;
+    }
+    return $result_string;
+  }
+
+  public function getQueryString($option_modifications=array()) {
+    $param_string = $this->getQueryParamString($option_modifications);
+    $host = $_SERVER['SERVER_NAME'];
+    $path = explode('?', $_SERVER['REQUEST_URI'])[0];
+    $protocol = strtolower(explode('/', $_SERVER['SERVER_PROTOCOL'])[0]);
+    return $protocol . '://' . $host . $path . '?' . $param_string;
+  }
+
+  public function paginate($page) { // Page can be an integer or a string representing an integer
+    $page = (string) page;
+    return $this->getQueryString(array('page' => $page));
+  } 
+
+  public function nextPage() {
+    if (isset($this->options['page'])) {
+      if (intval($this->options['page']) > 99) {
+	return $this->getQueryString(array('page' => 100));
+      } else {
+	return $this->getQueryString(array('page' => ($this->options['page'] + 1)));
+      }
+    } else {
+      return $this->getQueryString(array('page' => 2));
+    }
+  }
+
+  public function prevPage() {
+    if (isset($this->options['page'])) {
+      if (intval($this->options['page']) < 2) {
+	return $this->getQueryString(array('page' => 1));
+      } else { 
+	return $this->getQueryString(array('page' => ($this->options['page'] - 1)));
+      }
+    } else {
+      return $this->getQueryString(array('page' => 1));
+    }
+  }
+
+  public function previousPage() {
+    return $this->prevPage();
+  }
+
+  public function modifyQuery($option_modifications) {
+    return $this->getQueryString($option_modifications);
   }
 
   // Calls the specified PopShops API, then parses the results into internal data structures. 
@@ -80,25 +233,30 @@ class PopShopsApi {
   // Parameter $arguments is an associative array mapping $argument=>$value pairs which will be passed to the API.
   // The values of $arguments must be relevant for the API specified by $call_type
   // Returns nothing.
-  public function call($call_type, $arguments) {
-    $this->logger->info('Setting up to call PopShops ' . $call_type . ' API...');
+  public function get($call_type='products', $arguments=array()) {
+    $this->start_time = microtime(true);
+    $this->logger->info("Setting up to call PopShops $call_type API...");
     if ($this->called) {
-      $this->logger->error('Client attempted to call PopShopsApi object more than once. Call aborted.');
+      $this->logger->error('Client attempted to call PsApiCall object more than once. Call aborted.');
       return;
     }
-    if (! in_array($call_type, array('products', 'merchants', 'deals'))) {
-      	$this->logger->error('Invalid call_type "' . $call_type . '" was passed to PopShopsApi->call. Call aborted.');
-	return;
+    if (! in_array($call_type, array('products', 'merchants', 'deals', 'categories'))) {
+      $this->logger->error("Invalid call_type '$call_type' was passed to PsApiCall->call. Call aborted.");
+      return;
     }
     $this->call_type = $call_type;
+    if ($this->url_mode) {
+      $this->loadOptionsFromGetParams();
+    }
     $this->called = true;
     $this->options = array_merge($this->options, $arguments);
     $formatted_options = array();
-    foreach ($this->options as $key=>$value) array_push($formatted_options, $key . '=' . urlencode($value));
+    foreach ($this->options as $key=>$value) $formatted_options[] = $key . '=' . urlencode($value);
     $url = 'http://api.popshops.com/v3/' . $call_type . '.json?' . implode('&', $formatted_options);
     $this->logger->info('Request URL: ' . $url);
     $this->logger->info('Sending request...');
     $raw_json = file_get_contents($url);
+    $this->response_received_time = microtime(true);
     $this->logger->info('JSON file retrieved');
     $parsed_json = json_decode($raw_json, true);
     $this->logger->info('JSON file decoded');
@@ -106,321 +264,226 @@ class PopShopsApi {
       $this->logger->info('API reported status 200 OK');
     } else {
       $this->logger->info('API reported unexpected status: ' . $parsed_json['status'] . '; Message: ' . $parsed_json['message']);
-      $this->logger->error('Invalid status. Aborting call. Ensure all arguments passed to PopShopsApi->call are valid.');
+      $this->logger->error('Invalid status. Aborting call. Ensure all arguments passed to PsApiCall->get are valid.');
       return;
     }
-    switch ($call_type) { // Based on the type of call, process the returned JSON accordingly
-      case 'products':
-	$this->logger->info('Processing JSON from products call...');
-	$this->process_products_call($parsed_json);
-	break;
-      case 'merchants':
-	$this->logger->info('Processing JSON from merchants call...');
-	$this->process_merchants_call($parsed_json);
-	break;
-      case 'deals':
-	$this->logger->info('Processing JSON from deals call...');
-	$this->process_deals_call($parsed_json);
-	break;
-    }
+    $this->logger->info("Processing JSON from $call_type call...");
+    $this->processResults($parsed_json);
     $this->logger->info('JSON processing completed.');
+    $this->logger->info('Internal processing time elapsed: ' . (string) (microtime(true) - $this->response_received_time));
+    $this->logger->info('Total call time elapsed: ' . (string) (microtime(true) - $this->start_time));
   }
 
-  public function get_products() { // Returns an array of all of the products. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->products as $id=>$product) {
-      array_push($ret, $product);
+  public function getCategoryTree() {
+    if (isset($this->category_tree)) {
+      return $this->category_tree;
     }
-    return $ret;
   }
-
-  public function get_merchants() { // Returns an array of all of the merchants. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->merchants as $id=>$merchant) {
-      array_push($ret, $merchant);
+  // Retrieves an array of the given type of resource. $resource should be plural
+  public function resource($resource) {
+    $resource = strtolower($resource);
+    if (isset($this->{$resource})) {
+      return array_values($this->{$resource});
+    } else {
+      return array();
     }
-    return $ret;
   }
 
-  public function get_offers() { // Returns an array of all of the offers. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->offers as $id=>$offer) {
-      array_push($ret, $offer);
+  // Retrieves an individual resource by its id. Accepts plural $resource
+  public function resourceById($resource, $id) {
+    if (array_key_exists( $id, $this->{$resource})) {
+      return $this->{$resource}[$id];
+    } else {
+      return new PsApiDummy($this, $resource . " with id= $id is not present in PsApiCall results");
     }
-    return $ret;
   }
 
-  public function get_deals() { // Returns an array of all of the deals. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->deals as $id=>$deal) {
-      array_push($ret, $deal);
+  private function processObjectJson($json, $class, $resource_name) {
+    if (isset($json)) {
+      foreach ($json as $object) {
+        $this->logger->info('Internalizing ' . $resource_name . ' with ID=' . (string) $object['id']);
+        $this->internalize($object, (new $class($this)), $this->{$resource_name});
+      }
     }
-    return $ret;
   }
 
-  public function get_deal_types() { // Returns an array of all of the deal_types. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->deal_types as $id=>$deal_type) {
-      array_push($ret, $deal_type);
-    }
-    return $ret;
-  }
-
-  public function get_categories() { // Returns an array of all of the categories. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->categories as $id=>$category) {
-      array_push($ret, $category);
-    }
-    return $ret;
-  }
-
-  public function get_brands() { // Returns an array of all of the brands. Keys by a normal index, rather than by id
-    $ret = array();
-    foreach ($this->brands as $id=>$brand) {
-      array_push($ret, $brand);
-    }
-    return $ret;
-  }
-
-  public function get_product($id) { // Returns the product with the given id, if it exists
-    return $this->products[$id];
-  }
-
-  public function get_offer($id) { // Returns the offer with the given id, if it exists
-    return $this->offers[$id];
-  }
-
-  public function get_deal($id) { // Returns the deal with the given id, if it exists
-    return $this->deals[$id];
-  }
-
-  public function get_merchant($id) { // Returns the merchant with the given id, if it exists
-    return $this->merchants[$id];
-  }
-
-  public function get_category($id) { // Returns the category with the given id, if it exists
-    return $this->categories[$id];
-  }
-
-  public function get_deal_type($id) { // Returns the deal_type with the given id, if it exists
-    return $this->deal_types[$id];
-  }
-
-  public function get_brand($id) { // Returns the brand with the given id, if it exists
-    return $this->brands[$id];
-  }
-
-  // Processes and internalizes the information present in a returned chunk of JSON from the Products API
-  private function process_products_call($parsed_json) {
-
-    // Load products
-    $products = $parsed_json['results']['products']['product'];
-    foreach ($products as $product) {
+  private function processProductsJson($products_json) {
+    foreach ($products_json as $product) {
       $this->logger->info('Internalizing product with ID=' . (string) $product['id']);
-      $this->internalize_product($product);
-    }
-
-    // Load deals
-    $deals = $parsed_json['results']['deals']['deal'];
-    foreach ($deals as $deal) {
-      $this->logger->info('Internalizing deal with ID=' . (string) $deal['id']);
-      $this->internalize_deal($deal);
-    }
-
-    // Load merchants
-    $merchants = $parsed_json['resources']['merchants']['merchant'];
-    foreach ($merchants as $merchant) {
-      $this->logger->info('Internalizing merchant with ID=' . (string) $merchant['id']);
-      $this->internalize_merchant($merchant);
-    }
-    
-    // Load brands
-    $brands = $parsed_json['resources']['brands']['brand'];
-    foreach ($brands as $brand) {
-      $this->logger->info('Internalizing brand with ID=' . (string) $brand['id']);
-      $this->internalize_brand($brand);
-    }
-
-    // Load categories from both matches and context
-    if (array_key_exists('matches', $parsed_json['resources']['categories'])) { // There's two places that categories exists. The 'matches' subsection, and the 'context' subsection
-      $categories = $parsed_json['resources']['categories']['matches']['category']; // Load from matches, if it exists
-      foreach ($categories as $category) {
-	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
-	$this->internalize_category($category);
-      }
-    }
-    if (array_key_exists('context', $parsed_json['resources']['categories'])) { // There's two places that categories exists. The 'matches' subsection, and the 'context' subsection
-      $categories = $parsed_json['resources']['categories']['context']['category']; // Load from context, if it exists
-      foreach ($categories as $category) {
-	$this->logger->info('Internalizing category with ID=' . (string) $category['id']);
-	$this->internalize_category($category);
-      }
-    }
-
-    // Load deal types
-    $deal_types = $parsed_json['resources']['deal_types']['deal_type'];
-    foreach ($deal_types as $deal_type) {
-      $this->logger->info('Internalizing deal type with ID=' . (string) $deal_type['id']);
-      $this->internalize_deal_type($deal_type);
+      $this->internalizeProduct($product);
     }
   }
 
-  // Processes and internalizes the information present in a returned chunk of JSON from the Merchants API
-  private function process_merchants_call($parsed_json) {
+  private function processDealsJson($json) {
+    $this->processObjectJson($json, 'PsApiDeal', 'deals');
   }
 
-  // Processes and internalizes the information present in a returned chunk of JSON from the Deals API
-  private function process_deals_call($parsed_json) {
+  private function processMerchantsJson($json) {
+    $this->processObjectJson($json, 'PsApiMerchant', 'merchants');
+  }
+
+  private function processBrandsJson($json) {
+    $this->processObjectJson($json, 'PsApiBrand', 'brands');
+  }
+
+  private function processCategoriesJson($json) {
+    $this->processObjectJson($json, 'PsApiCategory', 'categories');
+  }
+
+  private function processDealTypesJson($json) {
+    $this->processObjectJson($json, 'PsApiDealType', 'deal_types');
+  }
+
+  private function processMerchantTypesJson($json) {
+    $this->processObjectJson($json, 'PsApiMerchantType', 'merchant_types');
+  }
+
+  private function processCountriesJson($json) {
+    $this->processObjectJson($json, 'PsApiCountry', 'countries');
+  }
+  
+  private function buildCategoryTree($json) {
+    $node = new PsApiCategoryTree($json['name'], $json['id']);
+    if (array_key_exists('leaf', $json)) {
+      return $node;
+    } else {
+      foreach($json['categories']['category'] as $cat) {
+	$node->addChild($this->buildCategoryTree($cat));
+      }
+      return $node;
+    }
+  }
+
+  private function processResults($json) {
+    if (isset($json['results'])) {
+      if (isset($json['results']['products']))
+        $this->processProductsJson($json['results']['products']['product']);
+      if (isset($json['results']['merchants']))
+        $this->processMerchantsJson($json['results']['merchants']['merchant']);
+      if (isset($json['results']['deals']))
+        $this->processDealsJson($json['results']['deals']['deal']);
+      if (isset($json['results']['categories'])) {
+	$this->logger->info('Building category tree from parsed JSON...');
+	$this->category_tree = $this->buildCategoryTree($json['results']['categories']['category']['0']);
+      }
+    }
+    if (isset($json['resources'])) {
+      if (isset($json['resources']['merchants']))
+        $this->processMerchantsJson($json['resources']['merchants']['merchant']);
+      if (isset($json['resources']['brands']))
+        $this->processBrandsJson($json['resources']['brands']['brand']);
+      if (isset($json['resources']['categories'])) {
+        if (isset($json['resources']['categories']['matches'])) // Load from matches, if it exists
+          $this->processCategoriesJson($json['resources']['categories']['matches']['category']);
+        if (isset($json['resources']['categories']['context'])) // Load from context, if it exists
+          $this->processCategoriesJson($json['resources']['categories']['context']['category']);
+      }
+      if (isset($json['resources']['deal_types']))
+        $this->processDealTypesJson($json['resources']['deal_types']['deal_type']);
+      if (isset($json['resources']['countries']))
+        $this->processCountriesJson($json['resources']['countries']['country']);
+      if (isset($json['resources']['merchant_types']))
+        $this->processMerchantTypesJson($json['resources']['merchant_types']['merchant_type']);
+      if (isset($json['resources']['deal_types']))
+        $this->processDealTypesJson($json['resources']['deal_types']['deal_type']);
+    }
+  }
+
+  // Takes the $json, puts its attributes and values into $object, and inserts it into $insert_into, keyed by $object's $json derived id
+  private function internalize($json, $object, & $insert_into) {
+    foreach ($json as $attribute=>$value) {
+      $object->setAttr($attribute, $value);
+    }
+    $insert_into[$object->attr('id')] = $object;
   }
 
   // Takes a chunk of decoded JSON representing a single Product (and any included offers)
   // Turns the JSON into a Product object, and appends it to the internal $products array, then turns any included Offer objects, and appends them to the internal $offers array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_product($product_json) {
+  private function internalizeProduct($product_json) {
     $tmp = new PsApiProduct($this);
     foreach ($product_json as $attribute=>$value) {
       switch ($attribute) { // This switch is meant to allow processing of special-case attributes
         case 'offers':
 	  $offers_array = $value['offer'];
 	  foreach ($offers_array as $offer) {
-	    $this->internalize_offer($offer);
-	    $this->offers[$offer['id']]->set_product($tmp); // Set the internalized offer's parent product to the currently internalized product
-	    $tmp->add_offer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
+	    $this->internalize($offer, (new PsApiOffer($this)), $this->offers);
+	    $this->offers[$offer['id']]->setProduct($tmp); // Set the internalized offer's parent product to the currently internalized product
+	    $tmp->addOffer($this->offers[$offer['id']]); // Add the offer we just internalized to the new (currently being internalized) product
 	  }
 	  break;
         default: // If there's no special case processing to do
 	  if (is_numeric($value) or is_string($value)) { // Don't include any arrays or attributes that aren't just strings or numbers
-	    $tmp->set_attr($attribute, $value);
+	    $tmp->setAttr($attribute, $value);
 	  }
       }
     }
     $this->products[$tmp->attr('id')] = $tmp;
-    
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Merchant
-  // Turns the JSON into a Merchant object, and appends it to the internal $merchants array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_merchant($merchant_json) {
-    $tmp = new PsApiMerchant($this);
-    foreach ($merchant_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->merchants[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Deal
-  // Turns the JSON into a Deal object, and appends it to the internal $deals array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_deal($deal_json) {
-    $tmp = new PsApiDeal($this);
-    foreach ($deal_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->deals[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Offer
-  // Turns the JSON into a Offer object, and appends it to the internal $offers array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_offer($offer_json) {
-    $tmp = new PsApiOffer($this);
-    foreach ($offer_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->offers[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Brand
-  // Turns the JSON into a Brand object, and appends it to the internal $brands array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_brand($brand_json) {
-    $tmp = new PsApiBrand($this);
-    foreach ($brand_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->brands[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Category
-  // Turns the JSON into a Category object, and appends it to the internal $categories array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_category($category_json) {
-    $tmp = new PsApiCategory($this);
-    foreach ($category_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->categories[$tmp->attr('id')] = $tmp;
-    return true;
-  }
-
-  // Takes a chunk of decoded JSON representing a single Deal Type
-  // Turns the JSON into a DealType object, and appends it to the internal $deal_types array
-  // Returns true if success, false if parse/data error occurs
-  private function internalize_deal_type($deal_type_json) {
-    $tmp = new PsApiDealType($this);
-    foreach ($deal_type_json as $attribute=>$value) {
-      switch ($attribute) { // This switch is meant to allow processing of special-case attributes
-        default: // If there's no special case processing to do, just toss it into the attributes
-	  $tmp->set_attr($attribute, $value);
-      }
-    }
-    $this->deal_types[$tmp->attr('id')] = $tmp;
-    return true;
   }
 }
 
-// PsApiProduct: An object-oriented representation of a Product, as returned from the PopShops V3 API
-class PsApiProduct {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Product instance
-  private $offers;     // A potentially cached array of references to offer objects; if not set, it'll be generated and cached when requested
-  private $category;   // A reference to the category object of this product, if it's been cached
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
+abstract class PsApiResource {
+  
+  protected $attributes;
+  protected $reference;
+  
   public function __construct($reference) {
     $this->reference = $reference;
-    $this->attr = array();
-    $this->offers = array(); // Special case; no other reference has to do this
+    $this->attributes = array();
   }
 
   // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
   public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
+    if (array_key_exists($attribute, $this->attributes)) {
+      return $this->attributes[$attribute];
     } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiProduct->attr: ' . $attribute;
+      return 'PopShops API Error: Invalid attribute passed to ' . get_class($this) . '->attr: ' . $attribute;
     }
   }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
+
+  // Sets the given attribute to the given value. Should not be used by end-users of the PsApiCall library
+  public function setAttr($attribute, $value) {
+    $this->attributes[$attribute] = $value;
   }
 
-  public function add_offer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
-    array_push($this->offers, $offer);
+  // Must be implemented by extended classes. Retrieves the specified resource (or array of resources) and returns it
+  abstract public function resource($resource);
+}
+
+class PsApiProduct extends PsApiResource {
+
+  private $offers;
+
+  public function __construct($reference) {
+    parent::__construct($reference);
+    $this->offers = array();
+  }
+
+  public function addOffer($offer) { // This is a special case method, due to the strange way that the API returns offers (nested inside of products)
+    $this->offers[] = $offer;
+  }
+
+  public function largestImageUrl() {
+    if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else {
+      return 'No image url provided for product with ID=' . $this->attributes['id'];
+    }
+  }
+
+  public function smallestImageUrl() {
+    if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else {
+      return 'No image url provided for product with ID=' . $this->attributes['id'];
+    }
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
@@ -430,257 +493,292 @@ class PsApiProduct {
     // Likely going to be using $this->reference a lot
     switch ($resource) {
       case 'offers':
-	return $this->offers; // Special case... No caching because of how offers are nested inside products
+        return $this->offers; // Special case... No caching because of how offers are nested inside products
       case 'category':
-	return $this->reference->get_category($this->attr('category'));
+        return $this->reference->resourceById('categories', $this->attr('category'));
       case 'brand':
-	return $this->reference->get_brand($this->attr('brand'));
+        return $this->reference->resourceById('brands', $this->attr('brand'));
     }
   }
 }
 
-// PsApiMerchant: An object-oriented representation of a Merchant, as returned from the PopShops V3 API
-class PsApiMerchant {
+class PsApiMerchant extends PsApiResource {
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Merchant instance
   private $offers;     // An array of offers from this merchant, if it's been cached already.
   private $deals;      // An array of deals from this merchant, if it's been cached already
 
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiMerchant->attr: ' . $attribute;
-    }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
   public function resource($resource) {
     // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
     // Big case statement for each possible type of resource
     // Likely going to be using $this->reference a lot
     switch ($resource) {
-      case 'offers':
-	if (isset($this->offers)) {
-	  return $this->offers;
-	} else {
-	  $this->offers = array();
-	  foreach ($this->reference->get_offers() as $offer) {
-	    if ($offer->attr('merchant') == $this->attr('id')) {
-	      array_push($this->offers, $offer);
-	    }
+    case 'offers':
+      if (isset($this->offers)) {
+	return $this->offers;
+      } else {
+	$this->offers = array();
+	foreach ($this->reference->resource('offers') as $offer) {
+	  if ($offer->attr('merchant') == $this->attr('id')) {
+	    $this->offers[] = $offer;
 	  }
 	}
 	return $this->offers;
-      case 'deals':
-	if (isset($this->deals)) {
-	  return $this->deals;
-	} else {
-	  $this->deals = array();
-	  foreach ($this->reference->get_deals() as $deal) {
-	    if ($deal->attr('merchant') == $this->attr('id')) {
-	      array_push($this->deals, $deal);
-	    }
+      }
+    case 'deals':
+      if (isset($this->deals)) {
+	return $this->deals;
+      } else {
+	$this->deals = array();
+	foreach ($this->reference->resource('deals') as $deal) {
+	  if ($deal->attr('merchant') == $this->attr('id')) {
+	    $this->deals[] = $deal;
 	  }
 	}
 	return $this->deals;
+      }
+    case 'merchant_type':
+      return $this->reference->resourceById('merchant_types', $this->attr('merchant_type'));
+    case 'country':
+      return $this->reference->resourceById('countries', $this->attr('country'));
+    case 'category':
+      return $this->reference->resourceById('categories', $this->attr('category'));
     }
   }
 }
 
-// PsApiDeal: An object-oriented representation of a Deal, as returned from the PopShops V3 API
-class PsApiDeal {
+class PsApiDeal extends PsApiResource {
+ 
+  private $deal_types;
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Deal instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiDeal->attr: ' . $attribute;
+  public function resource($resource) {
+    switch ($resource) {
+    case 'merchant':
+      return $this->reference->resourceById('merchants', $this->attr('merchant'));
+    case 'deal_types':
+      if (isset($this->deal_types)) {
+	return $this->deal_types;
+      } else {
+	$this->deal_types = array();
+	$type_ids = explode(',', $this->attr('deal_type'));
+	foreach ($type_ids as $type_id) {
+	  $this->deal_types[] = $this->reference->resourceById('deal_types', $type_id);
+	}
+	return $this->deal_types;
+      }
     }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
   }
 }
 
-// PsApiOffer: An object-oriented representation of a Offer, as returned from the PopShops V3 API
-class PsApiOffer {
+class PsApiOffer extends PsApiResource {
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Offer instance
-  private $product;    // A reference to the Product object that the offer belongs to
+  private $product;
 
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiOffer->attr: ' . $attribute;
-    }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  public function set_product($product) {
+  public function setProduct($product) {
     $this->product = $product;
+  }
+
+  public function largestImageUrl() {
+    if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else {
+      return 'No image url provided for offer with ID=' . $this->attributes['id'];
+    }
+  }
+
+  public function smallestImageUrl() {
+    if (array_key_exists('image_url_small', $this->attributes)) {
+      return $this->attributes['image_url_small'];
+    } else if (array_key_exists('image_url_medium', $this->attributes)) {
+      return $this->attributes['image_url_medium'];
+    } else if (array_key_exists('image_url_large', $this->attributes)) {
+      return $this->attributes['image_url_large'];
+    } else {
+      return 'No image url provided for offer with ID=' . $this->attributes['id'];
+    }
   }
 
   // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
   public function resource($resource) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
     switch ($resource) {
       case 'product':
-	return $this->product;
+        return $this->product;
       case 'merchant':
-        return $this->reference->get_merchant($this->attr('merchant'));
+        return $this->reference->resourceById('merchants', $this->attr('merchant'));
     }
   }
 }
 
+class PsApiBrand extends PsApiResource {
 
-// PsApiBrand: An object-oriented representation of a Brand, as returned from the PopShops V3 API
-class PsApiBrand {
+  private $products;
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Brand instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiBrand->attr: ' . $attribute;
+  public function resource($resource) {
+    switch($resource) {
+    case 'products':
+      if (isset($this->products)) {
+        return $this->products;
+      } else {
+        $this->products = array();
+        foreach ($this->reference->resource('products') as $product) {
+          if ($product->attr('brand') == $this->attr('id')) {
+            $this->products[] = $product;
+          }
+        }
+        return $this->products;
+      }
     }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
   }
 }
 
-// PsApiCategory: An object-oriented representation of a Category, as returned from the PopShops V3 API
-class PsApiCategory {
+class PsApiCategory extends PsApiResource {
 
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this Category instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiCategory->attr: ' . $attribute;
+  public function resource($resource) {
+    switch($resource) {
+    case 'products':
+      if (isset($this->products)) {
+        return $this->products;
+      } else {
+        $this->products = array();
+        foreach ($this->reference->resource('products') as $product) {
+          if (((string) $product->attr('category')) == ((string) $this->attr('id'))) {
+            $this->products[] = $product;
+          }
+        }
+        return $this->products;
+      }
     }
-  }
-  
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
-  }
-
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
   }
 }
 
-
-// PsApiDealType: An object-oriented representation of a Deal Type, as returned from the PopShops V3 API
-class PsApiDealType {
-
-  private $attr;       // Mapping of attribute=>value pairs from the API
-  private $reference;  // A reference to the PopShopsApi object which instantiated this DealType instance
-
-  // Instantiates the object, assigning the passed PopShopsApi object as the internal reference
-  public function __construct($reference) {
-    $this->reference = $reference;
-    $this->attr = array();
-  }
-
-  // Retrieves and returns the attribute specified (attributes are dumb fields, such as names and ids)
-  public function attr($attribute) {
-    if (array_key_exists($attribute, $this->attr)) {
-      return $this->attr[$attribute];
-    } else {
-      return 'PopShops API Error: Invalid attribute passed to PsApiDealType->attr: ' . $attribute;
-    }
+class PsApiCategoryTree {
+  
+  private $children;
+  private $name;
+  private $id;
+  
+  public function __construct($name, $id) {
+    $this->name = $name;
+    $this->id = $id;
+    $this->children = array();
   }
   
-  // Sets the given attribute to the given value. Should not be used by end-users of the PopShopsApi library
-  public function set_attr($attribute, $value) {
-    $this->attr[$attribute] = $value;
+  public function addChild($child) {
+    $this->children[] = $child;
+  }
+  
+  public function getName() {
+    return $this->name;
+  }
+  
+  public function getId() {
+    return $this->id;
+  }
+  
+  public function getChildren() {
+    return $this->children;
+  }  
+}
+
+class PsApiDealType extends PsApiResource {
+
+  private $deals;
+
+  public function resource($resource) {
+    switch ($resource) {
+    case 'deals':
+      if (isset($this->deals)) {
+        return $this->deals;
+      } else {
+        $this->deals = array();
+        foreach ($this->reference->resource('deals') as $deal) {
+          $type_ids = explode(',', $deal->attr('deal_type'));
+          foreach ($type_ids as $type_id) {
+            if (((string) $type_id) == ((string) $this->attr('id'))) {
+              $this->deals[] = $deal;
+            }
+          }
+        }
+        return $this->deals;
+      }
+    }
+  }
+}
+
+class PsApiCountry extends PsApiResource {
+
+  private $merchants;
+
+  public function resource($resource) {
+    switch($resource) {
+    case 'merchants':
+      if (isset($this->merchants)) {
+        return $this->merchants;
+      } else {
+        $this->merchants = array();
+        foreach ($this->reference->resource('merchants') as $merchant) {
+        if (((string) $merchant->attr('country')) == ((string) $this->attr('id'))) {
+          $this->merchants[] = $merchant;
+        }
+      }
+        return $this->merchants;
+      }
+    }
+  }
+}
+
+class PsApiMerchantType extends PsApiResource {
+
+  private $merchants;
+
+  public function resource($resource) {
+    switch($resource) {
+    case 'merchants':
+      if (isset($this->merchants)) {
+        return $this->merchants;
+      } else {
+        $this->merchants = array();
+        foreach ($this->reference->resource('merchants') as $merchant) {
+        if (((string) $merchant->attr('merchant_type')) == ((string) $this->attr('id'))) {
+          $this->merchants[] = $merchant;
+        }
+      }
+        return $this->merchants;
+      }
+    }
+  }
+}
+
+// Meant to be returned when an error occurs
+class PsApiDummy extends PsApiResource {
+  
+  private $message;
+
+  public function __construct($reference, $message=null) {
+    parent::__construct($reference);
+    if (isset($message)) {
+      $this->message = $message;
+    }
   }
 
-  // Retrieves the resource specified (resources are objects or arrays of objects somehow connected to this object)
-  public function resource($key) {
-    // If the resource has already been computed and cached, just use it. Otherwise, compute and cache it somewhere.
-    // Big case statement for each possible type of resource
-    // Likely going to be using $this->reference a lot
+  public function attr($attribute) {
+    if (isset($this->message)) {
+      return '[' . $this->message . ']';
+    } else {
+      return '[This element does not exist]';
+    }
+  }
+
+  public function resource($resource) {
+    if (isset($this->message)) {
+      return new PsApiDummy($reference, 'Parent object message: ' . $this->message);
+    } else {
+      return new PsApiDummy($reference);
+    }
   }
 }
 

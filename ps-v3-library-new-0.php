@@ -122,7 +122,7 @@ class PsApiCall {
   }
   
    // Constructs a PsApiCall object using the provided api key and catalog id.
-  public function __construct($account, $catalog=NULL, $url_mode=false, $url_mode_prefix='psapi_', $logging=false) {
+  public function __construct($account, $catalog=NULL, $logging=false, $url_mode=false, $url_mode_prefix='psapi_') {
 
     $this->logger = new PsApiLogger;
     $this->options['account'] = $account;
