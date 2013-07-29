@@ -1,0 +1,1 @@
+PopShopsApi: A PHP library for issuing and processing PopShops API calls
